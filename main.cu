@@ -258,14 +258,17 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 5;
 
-  size_t M = 1;
-  size_t N = 1;
-  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.4;
+  size_t M = 2;
+  size_t N = 2;
+  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.5;
+
+
+  srand(time(NULL));
 
   for (size_t blockCount = 13; blockCount < 8 * 13; blockCount += 13) {
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
-      times[t] = measureMatmul(M, N, K + 8 * 1024 * (rand() % 21), blockCount);
+      times[t] = measureMatmul(M, N, K +  2*1024 * (rand() % 1024), blockCount);
     }
     sort(times.begin(), times.end());
 
