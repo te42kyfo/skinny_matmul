@@ -8,19 +8,28 @@ INCLUDE 	:=
 NAME 		:= skinny_matmul
 
 # Target rules
-all: build
+all: test perf
 
-build: $(NAME)
+runtest: test
+	./test
 
-main.o:main.cu
-	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c $<
-
-$(NAME): main.o
+test: test.o
 	$(NVCC) -o $@ $+  $(LDFLAGS)
 
-run: build
-	./$(NAME)
+perf: perf.o
+	$(NVCC) -o $@ $+  $(LDFLAGS)
+
+test.o:test.cu matmul.cuh
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c $<
+
+perf.o:perf.cu matmul.cuh
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c $<
+
 
 clean:
 	rm -f ./$(NAME)
 	rm -f main.o
+	rm -f test.o
+	rm -f perf.o
+	rm -f perf
+	rm -f test
