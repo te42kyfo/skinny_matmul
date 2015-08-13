@@ -105,20 +105,19 @@ __global__ void blockScalarProductKernel(double *A, double *B, double *out,
   typedef cub::BlockReduce<double, BLOCKSIZE> BlockReduce;
   __shared__ typename BlockReduce::TempStorage temp_storage1;
 
-
   double blockSum1;
   double blockSum2;
   double blockSum3;
   double blockSum4;
 
-    blockSum1 = BlockReduce(temp_storage1).Sum(threadSum1);
-    __syncthreads();
-    blockSum2 = BlockReduce(temp_storage1).Sum(threadSum2);
-    __syncthreads();
-    blockSum3 = BlockReduce(temp_storage1).Sum(threadSum3);
-    __syncthreads();
-    blockSum4 = BlockReduce(temp_storage1).Sum(threadSum4);
-    __syncthreads();
+  blockSum1 = BlockReduce(temp_storage1).Sum(threadSum1);
+  __syncthreads();
+  blockSum2 = BlockReduce(temp_storage1).Sum(threadSum2);
+  __syncthreads();
+  blockSum3 = BlockReduce(temp_storage1).Sum(threadSum3);
+  __syncthreads();
+  blockSum4 = BlockReduce(temp_storage1).Sum(threadSum4);
+  __syncthreads();
 
   if (threadIdx.x == 0) {
     out[blockIdx.x + gridDim.x * 0] = blockSum1;
@@ -155,7 +154,7 @@ void twoXtwo(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
 }
 }
 
-namespace fourXfour {
+namespace MXN {
 
 __device__ inline double double_shfl_xor(double var, unsigned int srcLane,
                                          int width = 32) {
@@ -165,71 +164,68 @@ __device__ inline double double_shfl_xor(double var, unsigned int srcLane,
   return *reinterpret_cast<double *>(&a);
 }
 
-template <int BLOCKSIZE>
+template <int M, int N, int BLOCKSIZE>
 __global__ void blockProductKernel(double *A, double *B, double *out,
                                    size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  double threadSum1 = 0;
-  double threadSum2 = 0;
-  double threadSum3 = 0;
-  double threadSum4 = 0;
+  double threadSum[M][N];
 
-  __shared__ double transposeBuffer[BLOCKSIZE];
-
-  for (size_t kidx = tidx; kidx < K * 4; kidx += blockDim.x * gridDim.x) {
-    transposeBuffer[threadIdx.x] =
-        B[kidx / 4 + (threadIdx.x / 64) * K + threadIdx.x % 64];
-
-    double a = A[kidx];
-    threadSum1 += a * transposeBuffer[threadIdx.x / 4];
-    threadSum2 += a * transposeBuffer[threadIdx.x / 4 + 64];
-    threadSum3 += a * transposeBuffer[threadIdx.x / 4 + 128];
-    threadSum4 += a * transposeBuffer[threadIdx.x / 4 + 192];
-  }
-
-  if (tidx == 0) {
-    out[blockIdx.x * 16 + threadIdx.x * 4 + 1] =
-        threadSum1 + threadSum2 + threadSum3 + threadSum4;
-    //    out[blockIdx.x * 16 + threadIdx.x * 4 + 2] = threadSum2;
-    // out[blockIdx.x * 16 + threadIdx.x * 4 + 3] = threadSum3;
-    // out[blockIdx.x * 16 + threadIdx.x * 4 + 4] = threadSum4;
-  }
-  /*
-  for (int i = 16; i >= 4; i /= 2) {
-    threadSum1 += double_shfl_xor(threadSum1, i, 32);
-    threadSum2 += double_shfl_xor(threadSum2, i, 32);
-    threadSum3 += double_shfl_xor(threadSum3, i, 32);
-    threadSum4 += double_shfl_xor(threadSum4, i, 32);
-  }
-  if (warpLaneId < 4) {
-    warpSums[(threadIdx.x / 32) * 16 + warpLaneId * 4 + 0] = threadSum1;
-    warpSums[(threadIdx.x / 32) * 16 + warpLaneId * 4 + 1] = threadSum2;
-    warpSums[(threadIdx.x / 32) * 16 + warpLaneId * 4 + 2] = threadSum3;
-    warpSums[(threadIdx.x / 32) * 16 + warpLaneId * 4 + 3] = threadSum4;
-  }
-
-  __syncthreads();
-  double blockSum = 0;
-  if (threadIdx.x < 16) {
-    for (int i = 0; i < 8; i++) {
-      blockSum += warpSums[i * 16 + threadIdx.x];
+  for (int m = 0; m < M; m++) {
+    for (int n = 0; n < N; n++) {
+      threadSum[m][n] = 0.0;
     }
+  }
 
-    out[blockIdx.x * 16 + threadIdx.x] = blockSum;
-  }*/
+  for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        threadSum[m][n] += A[idx * M + m] * B[idx + K * n];
+      }
+    }
+  }
+
+  typedef cub::BlockReduce<double, BLOCKSIZE> BlockReduce;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
+  double blockSum[M][N];
+
+  for (int m = 0; m < M; m++) {
+    for (int n = 0; n < N; n++) {
+      blockSum[m][n] = BlockReduce(temp_storage).Sum(threadSum[m][n]);
+      __syncthreads();
+    }
+  }
+
+  if (threadIdx.x == 0) {
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        out[blockIdx.x + gridDim.x * (n * M + m)] = blockSum[m][n];
+      }
+    }
+  }
 }
 
-void fourXfour(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
-               double *B, double *result, const size_t M, const size_t N,
-               const size_t K, const int blockCount) {
+template <int M, int N>
+void MXN(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
+         double *B, double *result, const size_t K, const int blockCount) {
   if (temp_storage_bytes == 0) {
-    temp_storage_bytes = blockCount * sizeof(double);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_temp_storage,
+                           result, blockCount);
+    temp_storage_bytes =
+        (temp_storage_bytes + blockCount * sizeof(double)) * M * N;
     return;
   }
-
-  fourXfour::blockProductKernel<256> << <blockCount, 256>>>
+  MXN::blockProductKernel<M, N, 256> << <blockCount, 256>>>
       (A, B, d_temp_storage, K);
+
+  for (int m = 0; m < M; m++) {
+    for (int n = 0; n < N; n++) {
+      cub::DeviceReduce::Sum(d_temp_storage + (M * N) * blockCount,
+                             temp_storage_bytes,
+                             d_temp_storage + blockCount * (n * M + m),
+                             result + (n * M + m), blockCount);
+    }
+  }
 }
 }
 
@@ -237,26 +233,46 @@ void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
             double *B, double *result, const size_t M, const size_t N,
             const size_t K, const int blockCount) {
   if (M == 1 && N == 1) {
-    oneXone::oneXone(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K,
-                     blockCount);
-    return;
-  }
-  if (M == 2 && N == 1) {
-    twoXone::twoXone(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K,
-                     blockCount);
+    MXN::MXN<1, 1>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
     return;
   }
   if (M == 2 && N == 2) {
-    twoXtwo::twoXtwo(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K,
-                     blockCount);
+    MXN::MXN<2, 2>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
+    return;
+  }
+  if (M == 3 && N == 3) {
+    MXN::MXN<3, 3>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
+    return;
+  }
+  if (M == 4 && N == 4) {
+    MXN::MXN<4, 4>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
+    return;
+  }
+  if (M == 5 && N == 5) {
+    MXN::MXN<5, 5>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
+    return;
+  }
+  if (M == 6 && N == 6) {
+    MXN::MXN<6, 6>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
+    return;
+  }
+  if (M == 7 && N == 7) {
+    MXN::MXN<7, 7>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
+    return;
+  }
+  if (M == 8 && N == 8) {
+    MXN::MXN<8, 8>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                   blockCount);
     return;
   }
 
-  if (M == 4 && N == 4) {
-    fourXfour::fourXfour(temp_storage_bytes, d_temp_storage, A, B, result, M, N,
-                         K, blockCount);
-    return;
-  }
   std::cout << "No matmul variant for " << M << "xKx" << N << "\n";
   exit(1);
 }

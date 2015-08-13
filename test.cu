@@ -62,10 +62,10 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   srand(time(NULL) + salt++);
 
   for (size_t i = 0; i < M * K; i++) {
-    hA[i] = rand() % 3 - 1;
+    hA[i] = rand()%3-1;
   }
   for (size_t i = 0; i < N * K; i++) {
-    hB[i] = rand() % 3 - 1;
+    hB[i] = rand()%3-1;
   }
 
   GPU_ERROR(
@@ -85,7 +85,8 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   cudaMemcpy(hResult.data(), result, sizeof(double) * M * N, cudaMemcpyDefault);
 
   matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K, blockCount);
-  cudaMemcpy(hResult2.data(), result, sizeof(double) * M * N, cudaMemcpyDefault);
+  cudaMemcpy(hResult2.data(), result, sizeof(double) * M * N,
+             cudaMemcpyDefault);
 
   GPU_ERROR(cudaDeviceSynchronize());
 
@@ -137,8 +138,8 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 5;
 
-  size_t M = 2;
-  size_t N = 2;
+  size_t M = 5;
+  size_t N = 5;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.1;
 
   srand(time(NULL));
