@@ -72,8 +72,8 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 5;
 
-  size_t M = 4;
-  size_t N = 4;
+  size_t M = 2;
+  size_t N = 2;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.5;
 
   srand(time(NULL));

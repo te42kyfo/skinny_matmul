@@ -54,18 +54,18 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 
   vector<double> hA(M * K);
   vector<double> hB(N * K);
-  vector<double> hResult(M * N);
+  vector<double> hResult(M * N, 0);
+  vector<double> hResult2(M * N, 0);
   vector<double> cpuResult(M * N);
-
 
   static int salt = 0;
   srand(time(NULL) + salt++);
 
   for (size_t i = 0; i < M * K; i++) {
-    hA[i] = rand()%11-5;
+    hA[i] = rand() % 3 - 1;
   }
   for (size_t i = 0; i < N * K; i++) {
-    hB[i] = rand()%11-5;
+    hB[i] = rand() % 3 - 1;
   }
 
   GPU_ERROR(
@@ -78,22 +78,20 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
 
-  GPU_ERROR(cudaDeviceSynchronize());
-
   cout << "GPU, ";
   cout.flush();
 
   matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K, blockCount);
+  cudaMemcpy(hResult.data(), result, sizeof(double) * M * N, cudaMemcpyDefault);
 
+  matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K, blockCount);
+  cudaMemcpy(hResult2.data(), result, sizeof(double) * M * N, cudaMemcpyDefault);
 
-  GPU_ERROR(cudaMemcpy(hResult.data(), result, sizeof(double) * N * M,
-                       cudaMemcpyDefault));
-
+  GPU_ERROR(cudaDeviceSynchronize());
 
   cout << "CPU, ";
   cout.flush();
   cpuMatmul(hA.data(), hB.data(), cpuResult.data(), M, N, K);
-
 
   bool passed = true;
   for (size_t i = 0; i < N * M; i++) {
@@ -106,6 +104,15 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
         }
         cout << "\n";
       }
+      cout << "--\n";
+
+      for (size_t n = 0; n < N; n++) {
+        for (size_t m = 0; m < M; m++) {
+          cout << hResult2[n * M + m] << " \t";
+        }
+        cout << "\n";
+      }
+      cout << "--\n";
 
       for (size_t n = 0; n < N; n++) {
         for (size_t m = 0; m < M; m++) {
@@ -113,6 +120,7 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
         }
         cout << "\n";
       }
+      cout << "--\n\n";
 
       passed = false;
       break;
@@ -130,17 +138,17 @@ int main(int argc, char **argv) {
   int sampleSize = 5;
 
   size_t M = 2;
-  size_t N = 1;
+  size_t N = 2;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.1;
 
   srand(time(NULL));
 
-  for (size_t blockCount = 13; blockCount < 8 * 13; blockCount += 13) {
+  for (size_t blockCount = 13; blockCount < 8 * 13 * 8; blockCount += 13) {
     for (int t = 0; t < sampleSize; t++) {
       testMatmul(M, N, K, blockCount);
     }
 
-    cout << M << "xKx" << N << "\t" << setprecision(3) << blockCount << endl;
+    cout << M << "xKx" << N << "\t" << blockCount << endl;
   }
 
   cout.flush();

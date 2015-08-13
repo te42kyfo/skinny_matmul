@@ -45,19 +45,12 @@ __global__ void blockScalarProductKernel(double *A, double *B, double *out,
                                          size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  int warpLane = threadIdx.x % 32;
-
   double threadSum1 = 0.0;
   double threadSum2 = 0.0;
 
-  __shared__ double transposeBuffer[BLOCKSIZE * 2];
-
   for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
-  //  transposeBuffer[threadIdx.x] = A[idx * 2 - warpLane];
-  //  transposeBuffer[threadIdx.x + BLOCKSIZE] = A[idx * 2 - warpLane + 32];
-
-    threadSum1 += A[idx*2] * B[idx];
-    threadSum2 += A[idx*2+1] * B[idx];
+    threadSum1 += A[idx * 2] * B[idx];
+    threadSum2 += A[idx * 2 + 1] * B[idx];
   }
 
   typedef cub::BlockReduce<double, BLOCKSIZE> BlockReduce;
@@ -83,12 +76,10 @@ void twoXone(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
   }
   twoXone::blockScalarProductKernel<256> << <blockCount, 256>>>
       (A, B, d_temp_storage, K);
-  cub::DeviceReduce::Sum(d_temp_storage + 2 * blockCount,
-                         temp_storage_bytes, d_temp_storage, result,
-                         blockCount);
-  cub::DeviceReduce::Sum(
-      d_temp_storage + 2 * blockCount, temp_storage_bytes,
-      d_temp_storage + blockCount, result + 1, blockCount);
+  cub::DeviceReduce::Sum(d_temp_storage + 2 * blockCount, temp_storage_bytes,
+                         d_temp_storage, result, blockCount);
+  cub::DeviceReduce::Sum(d_temp_storage + 2 * blockCount, temp_storage_bytes,
+                         d_temp_storage + blockCount, result + 1, blockCount);
 }
 }
 
@@ -99,38 +90,41 @@ __global__ void blockScalarProductKernel(double *A, double *B, double *out,
                                          size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  int warpLane = threadIdx.x % 32;
-
   double threadSum1 = 0.0;
   double threadSum2 = 0.0;
   double threadSum3 = 0.0;
   double threadSum4 = 0.0;
 
-  __shared__ double transposeBuffer[2 * BLOCKSIZE];
-
   for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
-    transposeBuffer[threadIdx.x] = A[2 * idx - warpLane];
-    transposeBuffer[threadIdx.x + 32] = A[2 * idx - warpLane + 32];
-
-    threadSum1 += transposeBuffer[threadIdx.x] * B[idx];
-    threadSum2 += transposeBuffer[threadIdx.x + 32] * B[idx];
-    threadSum3 += transposeBuffer[threadIdx.x] * B[idx + K];
-    threadSum4 += transposeBuffer[threadIdx.x + 32] * B[idx + K];
+    threadSum1 += A[idx * 2] * B[idx];
+    threadSum2 += A[idx * 2 + 1] * B[idx];
+    threadSum3 += A[idx * 2] * B[idx + K];
+    threadSum4 += A[idx * 2 + 1] * B[idx + K];
   }
 
   typedef cub::BlockReduce<double, BLOCKSIZE> BlockReduce;
-  __shared__ typename BlockReduce::TempStorage temp_storage;
+  __shared__ typename BlockReduce::TempStorage temp_storage1;
 
-  double blockSum1 = BlockReduce(temp_storage).Sum(threadSum1);
-  double blockSum2 = BlockReduce(temp_storage).Sum(threadSum2);
-  double blockSum3 = BlockReduce(temp_storage).Sum(threadSum3);
-  double blockSum4 = BlockReduce(temp_storage).Sum(threadSum4);
+
+  double blockSum1;
+  double blockSum2;
+  double blockSum3;
+  double blockSum4;
+
+    blockSum1 = BlockReduce(temp_storage1).Sum(threadSum1);
+    __syncthreads();
+    blockSum2 = BlockReduce(temp_storage1).Sum(threadSum2);
+    __syncthreads();
+    blockSum3 = BlockReduce(temp_storage1).Sum(threadSum3);
+    __syncthreads();
+    blockSum4 = BlockReduce(temp_storage1).Sum(threadSum4);
+    __syncthreads();
 
   if (threadIdx.x == 0) {
-    out[blockIdx.x] = blockSum1;
-    out[blockIdx.x + blockDim.x] = blockSum2;
-    out[blockIdx.x + 2 * blockDim.x] = blockSum3;
-    out[blockIdx.x + 3 * blockDim.x] = blockSum4;
+    out[blockIdx.x + gridDim.x * 0] = blockSum1;
+    out[blockIdx.x + gridDim.x * 1] = blockSum2;
+    out[blockIdx.x + gridDim.x * 2] = blockSum3;
+    out[blockIdx.x + gridDim.x * 3] = blockSum4;
   }
 }
 
@@ -140,23 +134,24 @@ void twoXtwo(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
   if (temp_storage_bytes == 0) {
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_temp_storage,
                            result, blockCount);
-    temp_storage_bytes = (temp_storage_bytes + blockCount * sizeof(double)) * 4;
+    temp_storage_bytes =
+        (temp_storage_bytes + blockCount * sizeof(double)) * M * N;
     return;
   }
   twoXtwo::blockScalarProductKernel<256> << <blockCount, 256>>>
       (A, B, d_temp_storage, K);
-  cub::DeviceReduce::Sum(d_temp_storage + 4 * blockCount * sizeof(double),
-                         temp_storage_bytes, d_temp_storage, result,
+  cub::DeviceReduce::Sum(d_temp_storage + 4 * blockCount, temp_storage_bytes,
+                         d_temp_storage + blockCount * 0, result + 0,
                          blockCount);
-  cub::DeviceReduce::Sum(
-      d_temp_storage + 4 * blockCount * sizeof(double), temp_storage_bytes,
-      d_temp_storage + blockCount * sizeof(double), result + 1, blockCount);
-  cub::DeviceReduce::Sum(
-      d_temp_storage + 4 * blockCount * sizeof(double), temp_storage_bytes,
-      d_temp_storage + 2 * blockCount * sizeof(double), result + 2, blockCount);
-  cub::DeviceReduce::Sum(
-      d_temp_storage + 4 * blockCount * sizeof(double), temp_storage_bytes,
-      d_temp_storage + 3 * blockCount * sizeof(double), result + 3, blockCount);
+  cub::DeviceReduce::Sum(d_temp_storage + 4 * blockCount, temp_storage_bytes,
+                         d_temp_storage + blockCount * 1, result + 1,
+                         blockCount);
+  cub::DeviceReduce::Sum(d_temp_storage + 4 * blockCount, temp_storage_bytes,
+                         d_temp_storage + blockCount * 2, result + 2,
+                         blockCount);
+  cub::DeviceReduce::Sum(d_temp_storage + 4 * blockCount, temp_storage_bytes,
+                         d_temp_storage + blockCount * 3, result + 3,
+                         blockCount);
 }
 }
 

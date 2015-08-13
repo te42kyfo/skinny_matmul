@@ -13,6 +13,9 @@ all: test perf
 runtest: test
 	./test
 
+runperf: perf
+	./perf
+
 test: test.o
 	$(NVCC) -o $@ $+  $(LDFLAGS)
 
