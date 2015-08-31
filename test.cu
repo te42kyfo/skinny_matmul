@@ -62,10 +62,10 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   srand(time(NULL) + salt++);
 
   for (size_t i = 0; i < M * K; i++) {
-    hA[i] = rand()%3-1;
+    hA[i] = rand() % 3 - 1;
   }
   for (size_t i = 0; i < N * K; i++) {
-    hB[i] = rand()%3-1;
+    hB[i] = rand() % 3 - 1;
   }
 
   GPU_ERROR(
@@ -138,18 +138,15 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 5;
 
-  size_t M = 5;
-  size_t N = 5;
-  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.1;
-
-  srand(time(NULL));
-
-  for (size_t blockCount = 13; blockCount < 8 * 13 * 8; blockCount += 13) {
-    for (int t = 0; t < sampleSize; t++) {
-      testMatmul(M, N, K, blockCount);
+  for (size_t M = 1; M <= 10; M++) {
+    size_t N = 1;
+    size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.03;
+    for (size_t blockCount = 13; blockCount < 8 * 13; blockCount += 13) {
+      for (int t = 0; t < sampleSize; t++) {
+        testMatmul(M, N, K, blockCount);
+      }
+      cout << M << "xKx" << N << "\t" << blockCount << endl;
     }
-
-    cout << M << "xKx" << N << "\t" << blockCount << endl;
   }
 
   cout.flush();

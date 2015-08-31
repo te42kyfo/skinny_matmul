@@ -229,47 +229,33 @@ void MXN(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
 }
 }
 
+template <int MMAX>
+void matmul_dispatch(size_t &temp_storage_bytes, double *d_temp_storage,
+                     double *A, double *B, double *result, const size_t M,
+                     const size_t N, const size_t K, const int blockCount) {
+  if (M == MMAX) {
+    MXN::MXN<MMAX, 1>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                      blockCount);
+  } else if (M > 1) {
+    matmul_dispatch<MMAX - 1>(temp_storage_bytes, d_temp_storage, A, B, result,
+                              M, N, K, blockCount);
+  }
+}
+
+template <>
+void matmul_dispatch<1>(size_t &temp_storage_bytes, double *d_temp_storage,
+                        double *A, double *B, double *result, const size_t M,
+                        const size_t N, const size_t K, const int blockCount) {
+  MXN::MXN<1, 1>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                 blockCount);
+}
+
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
             double *B, double *result, const size_t M, const size_t N,
             const size_t K, const int blockCount) {
-  if (M == 1 && N == 1) {
-    MXN::MXN<1, 1>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 2 && N == 2) {
-    MXN::MXN<2, 2>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 3 && N == 3) {
-    MXN::MXN<3, 3>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 4 && N == 4) {
-    MXN::MXN<4, 4>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 5 && N == 5) {
-    MXN::MXN<5, 5>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 6 && N == 6) {
-    MXN::MXN<6, 6>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 7 && N == 7) {
-    MXN::MXN<7, 7>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
-    return;
-  }
-  if (M == 8 && N == 8) {
-    MXN::MXN<8, 8>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                   blockCount);
+  if (N == 1 && M < 10) {
+    matmul_dispatch<10>(temp_storage_bytes, d_temp_storage, A, B, result, M, N,
+                        K, blockCount);
     return;
   }
 
