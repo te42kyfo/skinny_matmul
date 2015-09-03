@@ -292,9 +292,35 @@ struct matmul_dispatch<0, NMAX> {
   }
 };
 
+template <int DMAX>
+struct matmul_dispatch_diagonal {
+  void static d(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
+                double *B, double *result, const size_t M, const size_t N,
+                const size_t K, const int blockCount) {
+    if (M != N) {
+      std::cout << "M != N, can't use diagonal dispatch\n";
+    } else if (DMAX == M) {
+      MXN::MXN<DMAX, DMAX>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+                           blockCount);
+    } else {
+      matmul_dispatch_diagonal<DMAX - 1>::d(temp_storage_bytes, d_temp_storage,
+                                            A, B, result, M, N, K, blockCount);
+    }
+  }
+};
+
+template <>
+struct matmul_dispatch_diagonal<0> {
+  void static d(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
+                double *B, double *result, const size_t M, const size_t N,
+                const size_t K, const int blockCount) {
+    std::cout << "Invalid Zero or negative Matrix Size\n";
+  }
+};
+
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
             double *B, double *result, const size_t M, const size_t N,
             const size_t K, const int blockCount) {
-  matmul_dispatch<10, 10>::m(temp_storage_bytes, d_temp_storage, A, B, result,
+  matmul_dispatch<32, 32>::m(temp_storage_bytes, d_temp_storage, A, B, result,
                              M, N, K, blockCount);
 }

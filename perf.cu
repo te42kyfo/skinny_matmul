@@ -70,26 +70,41 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 1;
+  int sampleSize = 3;
 
   srand(time(NULL));
 
-  for (int M = 2; M <= 2; M++) {
-    size_t N = M;
-    size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.05;
-    for (size_t blockCount = 13; blockCount < 2 * 13; blockCount += 13) {
-      vector<double> times(sampleSize);
-      for (int t = 0; t < sampleSize; t++) {
-        times[t] =
-            measureMatmul(M, N, K + 2 * 1024 * (rand() % 1024), blockCount);
-      }
-      sort(times.begin(), times.end());
+  for (int N = 1; N <= 32; N++) {
+    for (int M = 1; M <= 32; M++) {
+      size_t K = ((size_t)1 << 30) / ((M + N) * 8);
+      double bestTime = 0;
+      int bestBlockCount = 0;
+      for (size_t blockCount = 13; blockCount <= 8 * 13; blockCount += 13) {
+        vector<double> times(sampleSize);
+        for (int t = 0; t < sampleSize; t++) {
+          times[t] =
+              measureMatmul(M, N, K + 2 * 1024 * (rand() % 1024), blockCount);
+        }
+        sort(times.begin(), times.end());
 
-      cout << M << "xKx" << N << "\t" << setprecision(3) << blockCount << "\t"
-           << (2 * M * N * K) * 1e-9 / times[sampleSize / 2] << std::endl
-           << std::flush;
+        //    cout << M << "xKx" << N << "\t" << setprecision(3) << blockCount
+        //    <<
+        //    "\t"
+        //     << (2 * M * N * K) * 1e-9 / times[sampleSize / 2] << std::endl
+        //     << std::flush;
+
+        if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
+          bestTime = times[sampleSize / 2];
+          bestBlockCount = blockCount;
+        }
+      }
+      //    cout << "Best:\t" << M << "xKx" << N << "\t" << setprecision(3)
+      //     << bestBlockCount << "\t" << (2 * M * N * K) * 1e-9 / bestTime
+      //     << "\n\n" << std::flush;
+      cout << N << " " << M << "\t" << bestBlockCount << "\t" << setprecision(3)
+           << "\t" << (2 * M * N * K) * 1e-9 / bestTime << "\n";
+      cout.flush();
     }
-    cout << "\n";
   }
 
   cout.flush();
