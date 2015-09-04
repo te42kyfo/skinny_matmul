@@ -41,7 +41,7 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
                      const int blockCount) {
   double *A, *B, *d_temp_storage, *result;
 
-  int iters = 30;
+  int iters = 5;
   GPU_ERROR(cudaMalloc(&A, sizeof(double) * M * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(double) * N * K));
   initKernel << <52, 256>>> (A, M * K);
@@ -49,6 +49,7 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
 
   size_t temp_storage_bytes = 0;
   d_temp_storage = NULL;
+  result = NULL;
   MXN::MXN<PARM, PARN>(temp_storage_bytes, d_temp_storage, A, B, result, K,
                        blockCount);
 

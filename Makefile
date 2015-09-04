@@ -8,6 +8,7 @@ INCLUDE 	:=
 NAME 		:= skinny_matmul
 M 			:= 1
 N			:= 1
+PREFIX		:= .
 
 # Target rules
 all: test perf
@@ -16,18 +17,18 @@ runtest: test
 	./test
 
 runperf: perf
-	./perf$M-$N
+	$(PREFIX)/perf$M-$N
 
 test: test.o
 	$(NVCC) -o $@ $+  $(LDFLAGS)
 
-perf: perf$M-$N.o
-	$(NVCC) -o $@$M-$N $+ $(LDFLAGS)
+perf: $(PREFIX)/perf$M-$N.o
+	$(NVCC) -o $(PREFIX)/$@$M-$N $+ $(LDFLAGS)
 
 test.o:test.cu matmul.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
-perf$M-$N.o:perf.cu matmul.cuh
+$(PREFIX)/perf$M-$N.o:perf.cu matmul.cuh
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N $(INCLUDES) -o $@ -c $<
 
 
