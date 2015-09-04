@@ -6,6 +6,8 @@ CCFLAGS     :=
 LDFLAGS     := -L/opt/cuda/lib64
 INCLUDE 	:=
 NAME 		:= skinny_matmul
+M 			:= 1
+N			:= 1
 
 # Target rules
 all: test perf
@@ -14,19 +16,20 @@ runtest: test
 	./test
 
 runperf: perf
-	./perf
+	./perf$M-$N
 
 test: test.o
 	$(NVCC) -o $@ $+  $(LDFLAGS)
 
-perf: perf.o
-	$(NVCC) -o $@ $+  $(LDFLAGS)
+perf: perf$M-$N.o
+	$(NVCC) -o $@$M-$N $+ $(LDFLAGS)
 
 test.o:test.cu matmul.cuh
-	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c $<
+	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
-perf.o:perf.cu matmul.cuh
-	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c $<
+perf$M-$N.o:perf.cu matmul.cuh
+	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N $(INCLUDES) -o $@ -c $<
+
 
 
 clean:
