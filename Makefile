@@ -4,7 +4,7 @@ NVCC := nvcc
 NVCCFLAGS   := -O3 -arch=sm_35  --compiler-options="-O2 -pipe -march=native -Wall"
 CCFLAGS     :=
 LDFLAGS     := -L/opt/cuda/lib64
-INCLUDE 	:=
+INCLUDES 	:= -I/home/hpc/ihpc/ihpc05/cub/
 NAME 		:= skinny_matmul
 M 			:= 1
 N			:= 1
@@ -27,7 +27,7 @@ test.o:test.cu matmul.cuh
 $(PREFIX)/perf$M-$N.o:perf.cu
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N $(INCLUDES) -o $@ -c $<
 
-$(PREFIX)/matmul$M-$N.o:matmul.cu matmul.cuh
+$(PREFIX)/matmul$M-$N.o:matmul.cu matmul.cuh genv1.cuh
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N $(INCLUDES) -o $@ -c $<
 
 

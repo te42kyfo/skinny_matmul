@@ -1,16 +1,17 @@
 #!/bin/sh
 
+mkdir $1/$2
+mkdir $1/$2/build
 
-NSTART=64
-NEND=100
-MSTART=64
-MEND=100
+git clone . $1/$2
 
-for m in {$MSTART .. $MEND}
+
+
+for m in {1..5}
 do
-    for n in {$NSTART .. $NEND}
+    for n in {1..5}
     do
-        make perf N=$n M=$m PREFIX=/elxfs/ihpc/ihpc05 &
+        make -f $1/$2/Makefile perf N=$n M=$m PREFIX=$1/$2/build &
         while test $(jobs -p | wc -w) -ge 200; do sleep 1; done
     done
 done
@@ -18,10 +19,11 @@ done
 wait
 echo "all done"
 
-for m in {$MSTART .. $MEND}
+
+for m in {1..5}
 do
-    for n in {$NSTART .. $NEND}
+    for n in {1..5}
     do
-        /elxfs/ihpc/ihpc05/perf$m-$n | tee --append diagonal.txt
+        $1/$2/build/perf$m-$n | tee --append square.txt
     done
 done

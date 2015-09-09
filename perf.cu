@@ -53,7 +53,7 @@ void initMatmul(const size_t M, const size_t N, const size_t K,
   temp_storage_bytes = 0;
   d_temp_storage = NULL;
   result = NULL;
-  matmul(temp_storage_bytes, d_temp_storage, A, B, result, K, blockCount);
+  matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K, blockCount);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
   GPU_ERROR(cudaMalloc(&result, sizeof(double) * M * N));
@@ -73,8 +73,8 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
   int iters = 1;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    matmul(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                         blockCount);
+    matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K,
+           blockCount);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
