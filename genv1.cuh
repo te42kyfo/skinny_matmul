@@ -30,7 +30,7 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
   for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        threadSum[m][n] += __ldg( A + (idx * M + m)) * B[idx + K * n];
+        threadSum[m][n] += A[idx * M + m] * B[idx + K * n];
       }
     }
   }
@@ -59,6 +59,7 @@ template <int M, int N>
 void GENV1(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
            double *B, double *result, const size_t K, const int blockCount) {
   if (temp_storage_bytes == 0) {
+    cudaFuncSetCacheConfig(blockProductKernel<M, N, 256>, cudaFuncCachePreferL1);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_temp_storage,
                            result, blockCount);
     temp_storage_bytes =
