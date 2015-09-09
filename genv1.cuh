@@ -30,7 +30,7 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
   for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        threadSum[m][n] += A[idx * M + m] * B[idx + K * n];
+        threadSum[m][n] += __ldg( A + (idx * M + m)) * B[idx + K * n];
       }
     }
   }
