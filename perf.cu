@@ -41,7 +41,7 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
                      const int blockCount) {
   double *A, *B, *d_temp_storage, *result;
 
-  int iters = 5;
+  int iters = 1;
   GPU_ERROR(cudaMalloc(&A, sizeof(double) * M * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(double) * N * K));
   initKernel << <52, 256>>> (A, M * K);
@@ -80,24 +80,33 @@ int main(int argc, char **argv) {
   size_t N = PARN;
   size_t M = PARM;
 
-  size_t K = ((size_t)1 << 30) / ((M + N) * 8);
+  size_t K = 0.01 * ((size_t)1 << 30) / ((M + N) * 8);
+  size_t maxK = 2 * ((size_t)1 << 30) / ((M + N) * 8);
+
   double bestTime = 0;
   int bestBlockCount = 0;
+
+  double resultTime = 0;
+  while (resultTime < 1 && K * 2 < maxK) {
+    K *= 2;
+    resultTime = measureMatmul(M, N, K, 26);
+    cout << resultTime << "\n";
+  }
 
   for (size_t blockCount = 13; blockCount <= 8 * 13; blockCount += 13) {
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
       times[t] =
-          measureMatmul(M, N, K + 2 * 1024 * (rand() % 1024), blockCount);
+          measureMatmul(M, N, K, blockCount);
     }
+
     sort(times.begin(), times.end());
 
-    if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
-      bestTime = times[sampleSize / 2];
+    if (times[sampleSize/2] < bestTime || bestBlockCount == 0) {
+      bestTime = times[sampleSize/2];
       bestBlockCount = blockCount;
     }
   }
-
   cout << M << " " << N << "\t" << bestBlockCount << "\t" << setprecision(3)
        << "\t" << (2 * M * N * K) * 1e-9 / bestTime << "\n";
   cout.flush();
