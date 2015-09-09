@@ -10,25 +10,24 @@ M 			:= 1
 N			:= 1
 PREFIX		:= .
 
-# Target rules
-all: test perf
-
 runtest: test
 	./test
-
-runperf: perf
-	$(PREFIX)/perf$M-$N
 
 test: test.o
 	$(NVCC) -o $@ $+  $(LDFLAGS)
 
-perf: $(PREFIX)/perf$M-$N.o
+
+
+perf: $(PREFIX)/perf$M-$N.o $(PREFIX)/matmul$M-$N.o
 	$(NVCC) -o $(PREFIX)/$@$M-$N $+ $(LDFLAGS)
 
 test.o:test.cu matmul.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
-$(PREFIX)/perf$M-$N.o:perf.cu matmul.cuh
+$(PREFIX)/perf$M-$N.o:perf.cu
+	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N $(INCLUDES) -o $@ -c $<
+
+$(PREFIX)/matmul$M-$N.o:matmul.cu matmul.cuh
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N $(INCLUDES) -o $@ -c $<
 
 

@@ -20,7 +20,7 @@ double dtime() {
 
 #define GPU_ERROR(ans) \
   { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line,
+inline void gpuAssert(cudaError_t code, const char* file, int line,
                       bool abort = true) {
   if (code != cudaSuccess) {
     cerr << "GPUassert: \"" << cudaGetErrorString(code) << "\"  in " << file
@@ -29,85 +29,93 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
   }
 }
 
-__global__ void initKernel(double *A, size_t N) {
+__global__ void initKernel(double* A, size_t N) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   for (size_t idx = tidx; idx < N; idx += blockDim.x * gridDim.x) {
-    A[idx] = 2.0;
+    A[idx] = idx % 3 - 1;
   }
 }
 
-double measureMatmul(const size_t M, const size_t N, const size_t K,
-                     const int blockCount) {
-  double *A, *B, *d_temp_storage, *result;
+double* A;
+double* B;
+double* d_temp_storage;
+double* result;
+size_t temp_storage_bytes;
 
-  int iters = 1;
+void initMatmul(const size_t M, const size_t N, const size_t K,
+                const size_t blockCount) {
   GPU_ERROR(cudaMalloc(&A, sizeof(double) * M * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(double) * N * K));
   initKernel << <52, 256>>> (A, M * K);
   initKernel << <52, 256>>> (B, N * K);
 
-  size_t temp_storage_bytes = 0;
+  temp_storage_bytes = 0;
   d_temp_storage = NULL;
   result = NULL;
-  MXN::MXN<PARM, PARN>(temp_storage_bytes, d_temp_storage, A, B, result, K,
-                       blockCount);
+  matmul(temp_storage_bytes, d_temp_storage, A, B, result, K, blockCount);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
   GPU_ERROR(cudaMalloc(&result, sizeof(double) * M * N));
+}
 
+void deInitMatmul() {
+  GPU_ERROR(cudaFree(A));
+  GPU_ERROR(cudaFree(B));
+  GPU_ERROR(cudaFree(d_temp_storage));
+  GPU_ERROR(cudaFree(result));
+}
+
+double measureMatmul(const size_t M, const size_t N, const size_t K,
+                     const int blockCount) {
   GPU_ERROR(cudaDeviceSynchronize());
+
+  int iters = 1;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    MXN::MXN<PARM, PARN>(temp_storage_bytes, d_temp_storage, A, B, result, K,
+    matmul(temp_storage_bytes, d_temp_storage, A, B, result, K,
                          blockCount);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
 
-  GPU_ERROR(cudaFree(A));
-  GPU_ERROR(cudaFree(B));
-  GPU_ERROR(cudaFree(d_temp_storage));
-  GPU_ERROR(cudaFree(result));
   return (t2 - t1) / iters;
 }
 
-int main(int argc, char **argv) {
-  int sampleSize = 3;
-
-  srand(time(NULL));
-
+int main(int argc, char** argv) {
   size_t N = PARN;
   size_t M = PARM;
 
+  size_t maxK = 1 * ((size_t)1 << 30) / ((M + N) * 8);
+  initMatmul(M, N, maxK, 8 * 13);
+
   size_t K = 0.01 * ((size_t)1 << 30) / ((M + N) * 8);
-  size_t maxK = 2 * ((size_t)1 << 30) / ((M + N) * 8);
+
+  double resultTime = 0;
+  while (resultTime < 0.3 && K * 2 < maxK) {
+    K *= 2;
+    resultTime = measureMatmul(M, N, K, 26);
+  }
 
   double bestTime = 0;
   int bestBlockCount = 0;
 
-  double resultTime = 0;
-  while (resultTime < 1 && K * 2 < maxK) {
-    K *= 2;
-    resultTime = measureMatmul(M, N, K, 26);
-    cout << resultTime << "\n";
-  }
-
   for (size_t blockCount = 13; blockCount <= 8 * 13; blockCount += 13) {
+    int sampleSize = 1;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
-      times[t] =
-          measureMatmul(M, N, K, blockCount);
+      times[t] = measureMatmul(M, N, K, blockCount);
     }
 
     sort(times.begin(), times.end());
 
-    if (times[sampleSize/2] < bestTime || bestBlockCount == 0) {
-      bestTime = times[sampleSize/2];
+    if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
+      bestTime = times[sampleSize / 2];
       bestBlockCount = blockCount;
     }
   }
   cout << M << " " << N << "\t" << bestBlockCount << "\t" << setprecision(3)
        << "\t" << (2 * M * N * K) * 1e-9 / bestTime << "\n";
   cout.flush();
+  deInitMatmul();
 }
