@@ -5,9 +5,11 @@
 #include <algorithm>
 #include <vector>
 #include <cuda_runtime.h>
+#include <omp.h>
 
+#include "genv1.cuh"
+#include "genv2.cuh"
 #include "multi_dispatch.cuh"
-#include "matmul.cuh"
 
 using namespace std;
 
@@ -63,11 +65,20 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   static int salt = 0;
   srand(time(NULL) + salt++);
 
-  for (size_t i = 0; i < M * K; i++) {
-    hA[i] = rand() % 3 - 1;
-  }
-  for (size_t i = 0; i < N * K; i++) {
-    hB[i] = rand() % 3 - 1;
+  int start = rand();
+#pragma omp parallel num_threads(10)
+  {
+    int randstate = start + omp_get_thread_num();
+#pragma omp for
+    for (size_t i = 0; i < M * K; i++) {
+      randstate = (randstate * 7 + 11) % 101;
+      hA[i] = randstate % 3 - 1;
+    }
+#pragma omp for
+    for (size_t i = 0; i < N * K; i++) {
+      randstate = (randstate * 7 + 11) % 101;
+      hB[i] = randstate % 3 - 1;
+    }
   }
 
   GPU_ERROR(
@@ -105,7 +116,7 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   bool passed = true;
   for (size_t i = 0; i < N * M; i++) {
     if (hResult[i] != cpuResult[i]) {
-      cout << "Mismatch\n";
+      cout << "\e[31mMismatch\e[0m\n";
 
       for (size_t n = 0; n < N; n++) {
         for (size_t m = 0; m < M; m++) {
@@ -135,7 +146,7 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
       break;
     }
   }
-  if (passed) cout << "Passed (" << cpuResult[N * M / 2] << ")\n";
+  if (passed) cout << "\e[32mPassed\e[0m (" << cpuResult[N * M / 2] << ")\n";
 
   GPU_ERROR(cudaFree(A));
   GPU_ERROR(cudaFree(B));
@@ -144,15 +155,15 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 4;
+  int sampleSize = 1;
 
-  for (size_t M = 1; M <= 4; M++) {
-    for (size_t N = 1; N <= 4; N++) {
-      size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.03;
-      for (size_t blockCount = 8 * 13; blockCount <= 8 * 13; blockCount += 13) {
+  for (size_t M = 1; M <= 64; M++) {
+    for (size_t N = 1; N <= 64; N++) {
+      size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.01;
+      for (size_t blockCount = 5 * 13; blockCount <= 6 * 13; blockCount += 13) {
         for (int t = 0; t < sampleSize; t++) {
           cout << M << "xKx" << N << "\t" << blockCount << "\t";
-          testMatmul<4, 4>(M, N, K, blockCount);
+          testMatmul<64, 64>(M, N, K, blockCount);
         }
       }
     }

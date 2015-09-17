@@ -2,13 +2,17 @@
 
 git clone . $1/$2
 
-mkdir $1/$2/build
+cd $1/$2
 
-for m in {10..30}
+git checkout $2
+
+mkdir build
+
+for m in {1..100}
 do
-    for n in {2..2}
+    for n in {1..100}
     do
-        make -f $1/$2/Makefile perf N=$n M=$m PREFIX=$1/$2/build &
+        make  perf N=$n M=$m PREFIX=./build &
         while test $(jobs -p | wc -w) -ge 200; do sleep 1; done
     done
 done
@@ -16,12 +20,12 @@ done
 wait
 echo "all done"
 
-rm $1/$2/square.txt
+rm square.txt
 
-for m in {10..30}
+for m in {1..100}
 do
-    for n in {2..2}
+    for n in {1..100}
     do
-        $1/$2/build/perf$m-$n | tee --append $1/$2/square.txt
+        ./build/perf$m-$n | tee --append ./square.txt
     done
 done

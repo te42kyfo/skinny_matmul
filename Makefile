@@ -1,7 +1,7 @@
 NVCC := nvcc
 
 # internal flags
-NVCCFLAGS   := -O3 -arch=sm_35  --compiler-options="-O2 -pipe -march=native -Wall"
+NVCCFLAGS   := -O3 -arch=sm_35  --compiler-options="-O2 -pipe -march=native -Wall -fopenmp"
 CCFLAGS     :=
 LDFLAGS     := -L/opt/cuda/lib64
 INCLUDES 	:= -I/home/hpc/ihpc/ihpc05/cub/
@@ -14,14 +14,12 @@ runtest: test
 	./test
 
 test: test.o
-	$(NVCC) -o $@ $+  $(LDFLAGS)
-
-
+	$(NVCC) -o $@ $+  $(LDFLAGS)  --compiler-options="-fopenmp"
 
 perf: $(PREFIX)/perf$M-$N.o $(PREFIX)/matmul$M-$N.o
 	$(NVCC) -o $(PREFIX)/$@$M-$N $+ $(LDFLAGS)
 
-test.o:test.cu matmul.cuh
+test.o:test.cu genv1.cuh genv2.cuh multi_dispatch.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
 $(PREFIX)/perf$M-$N.o:perf.cu
