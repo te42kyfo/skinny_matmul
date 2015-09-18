@@ -89,18 +89,18 @@ int main(int argc, char** argv) {
   size_t maxK = 1 * ((size_t)1 << 30) / ((M + N) * 8);
   initMatmul(M, N, maxK, 8 * 13);
 
-  size_t K = 0.01 * ((size_t)1 << 30) / ((M + N) * 8);
+  size_t K = 0.05 * ((size_t)1 << 30) / ((M + N) * 8);
 
-  double resultTime = 0;
-  while (resultTime < 0.3 && K * 2 < maxK) {
-    K *= 2;
-    resultTime = measureMatmul(M, N, K, 26);
-  }
+  // double resultTime = 0;
+  //while (resultTime < 0.3 && K * 2 < maxK) {
+  //  K *= 2;
+  //  resultTime = measureMatmul(M, N, K, 26);
+  // }
 
   double bestTime = 0;
   int bestBlockCount = 0;
 
-  for (size_t blockCount = 13; blockCount <= 8 * 13; blockCount += 13) {
+  for (size_t blockCount = 8*13; blockCount <= 8 * 13; blockCount += 13) {
     int sampleSize = 1;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
@@ -114,8 +114,8 @@ int main(int argc, char** argv) {
       bestBlockCount = blockCount;
     }
   }
-  cout << M << " " << N << "\t" << bestBlockCount << "\t" << setprecision(3)
-       << "\t" << (2 * M * N * K) * 1e-9 / bestTime << "\n";
+  cout << M << " " << N << " " << K << "\t" << bestBlockCount << "\t" << setprecision(3)
+       << "\t" << bestTime << "\n";
   cout.flush();
   deInitMatmul();
 }
