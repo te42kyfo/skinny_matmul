@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
   size_t maxK = 1 * ((size_t)1 << 30) / ((M + N) * 8);
   initMatmul(M, N, maxK, 8 * 13);
 
-  size_t K = 0.05 * ((size_t)1 << 30) / ((M + N) * 8);
+  size_t K = 0.2 * ((size_t)1 << 30) / ((M + N) * 8);
 
   // double resultTime = 0;
   //while (resultTime < 0.3 && K * 2 < maxK) {

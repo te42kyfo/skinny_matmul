@@ -157,13 +157,13 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 1;
 
-  for (size_t M = 1; M <= 64; M++) {
-    for (size_t N = 1; N <= 64; N++) {
+  for (size_t M = 1; M <= 8; M++) {
+    for (size_t N = 1; N <= 8; N++) {
       size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.01;
       for (size_t blockCount = 5 * 13; blockCount <= 6 * 13; blockCount += 13) {
         for (int t = 0; t < sampleSize; t++) {
           cout << M << "xKx" << N << "\t" << blockCount << "\t";
-          testMatmul<64, 64>(M, N, K, blockCount);
+          testMatmul<8, 8>(M, N, K, blockCount);
         }
       }
     }
