@@ -29,12 +29,14 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
   double threadSum[N];
   for (int n = 0; n < N; n++) {
-    threadSum[n] = 0;
+    threadSum[n] = n + tidx;
   }
 
-  for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
-    for (int n = 0; n < N; n++) {
-      threadSum[n] += A[idx * M + m] * B[idx + K * n];
+  if (threadIdx.x > 311) {
+    for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
+      for (int n = 0; n < N; n++) {
+        threadSum[n] += A[idx * M + m] * B[idx + K * n];
+      }
     }
   }
 
