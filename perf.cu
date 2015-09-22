@@ -91,16 +91,16 @@ int main(int argc, char** argv) {
 
   size_t K = 0.2 * ((size_t)1 << 30) / ((M + N) * 8);
 
-  // double resultTime = 0;
-  //while (resultTime < 0.3 && K * 2 < maxK) {
-  //  K *= 2;
-  //  resultTime = measureMatmul(M, N, K, 26);
-  // }
+  double resultTime = 0;
+  while (resultTime < 0.3 && K * 2 < maxK) {
+    K *= 2;
+    resultTime = measureMatmul(M, N, K, 26);
+  }
 
   double bestTime = 0;
   int bestBlockCount = 0;
 
-  for (size_t blockCount = 8*13; blockCount <= 8 * 13; blockCount += 13) {
+  for (size_t blockCount = 1*13; blockCount <= 8 * 13; blockCount += 13) {
     int sampleSize = 1;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {

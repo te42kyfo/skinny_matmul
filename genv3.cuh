@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
-namespace GENV2 {
+namespace GENV3 {
 
 __device__ inline double double_shfl_xor(double var, unsigned int srcLane,
                                          int width = 32) {
@@ -12,6 +12,24 @@ __device__ inline double double_shfl_xor(double var, unsigned int srcLane,
   a.x = __shfl_xor(a.x, srcLane, width);
   a.y = __shfl_xor(a.y, srcLane, width);
   return *reinterpret_cast<double *>(&a);
+}
+
+template <int M, int N>
+__global__ void deviceReduce(double *blockResults, double *result,
+                             int blockCount) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (tidx >= M * N) return;
+
+  int n = tidx / M;
+  int m = tidx % M;
+
+  double sum = 0;
+  for (int i = 0; i < blockCount; i++) {
+    sum += blockResults[i * M * N + n * M + m];
+  }
+
+  result[n * M + m] = sum;
 }
 
 template <int M, int N, int BLOCKSIZE>
@@ -48,7 +66,7 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
       for (int i = threadIdx.x; i < BLOCKSIZE; i += M) {
         blockSum += blockStorage[i];
       }
-      out[blockIdx.x + gridDim.x * (n * M + m)] = blockSum;
+      out[blockIdx.x * M * N + n * M + m] = blockSum;
     }
   }
 }
@@ -57,22 +75,13 @@ template <int M, int N>
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
             double *B, double *result, const size_t K, const int blockCount) {
   if (temp_storage_bytes == 0) {
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_temp_storage,
-                           result, blockCount);
-    temp_storage_bytes =
-        (temp_storage_bytes + blockCount * sizeof(double)) * M * N;
+    temp_storage_bytes = blockCount * sizeof(double) * M * N;
     return;
   }
-  GENV2::blockProductKernel<M, N, 256> << <blockCount, 256>>>
+  GENV3::blockProductKernel<M, N, 256> << <blockCount, 256>>>
       (A, B, d_temp_storage, K);
 
-  for (int m = 0; m < M; m++) {
-    for (int n = 0; n < N; n++) {
-      cub::DeviceReduce::Sum(d_temp_storage + (M * N) * blockCount,
-                             temp_storage_bytes,
-                             d_temp_storage + blockCount * (n * M + m),
-                             result + (n * M + m), blockCount);
-    }
-  }
+  GENV3::deviceReduce<M, N> << <M * N / 256 + 1, 256>>>
+      (d_temp_storage, result, blockCount);
 }
 }

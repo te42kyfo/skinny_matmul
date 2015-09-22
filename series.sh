@@ -20,12 +20,12 @@ done
 wait
 echo "all done"
 
-rm square.txt
+rm square_$2.txt
 
 for m in {1..100}
 do
     for n in {1..100}
     do
-        ./build/perf$m-$n | tee --append ./square.txt
+        ./build/perf$m-$n | tee --append ./square_$2.txt
     done
 done

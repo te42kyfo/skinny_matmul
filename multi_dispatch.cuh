@@ -22,7 +22,7 @@ struct matmul_dispatch {
                 double *B, double *result, const size_t M, const size_t N,
                 const size_t K, const int blockCount) {
     if (N == NMAX) {
-      GENV2::matmul<MMAX, NMAX>(temp_storage_bytes, d_temp_storage, A, B,
+      GENV3::matmul<MMAX, NMAX>(temp_storage_bytes, d_temp_storage, A, B,
                                 result, K, blockCount);
     } else {
       matmul_dispatch<MMAX, NMAX - 1>::n(temp_storage_bytes, d_temp_storage, A,
@@ -62,8 +62,8 @@ struct matmul_dispatch<0, NMAX> {
     exit(1);
   }
 };
-/*
-template <typename VER, int DMAX>
+
+template <int DMAX>
 struct matmul_dispatch_diagonal {
   void static d(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
                 double *B, double *result, const size_t M, const size_t N,
@@ -71,22 +71,20 @@ struct matmul_dispatch_diagonal {
     if (M != N) {
       std::cout << "M != N, can't use diagonal dispatch\n";
     } else if (DMAX == M) {
-      VER::matmul<DMAX, DMAX>(temp_storage_bytes, d_temp_storage, A, B, result,
-                              K, blockCount);
+      GENV3::matmul<DMAX, DMAX>(temp_storage_bytes, d_temp_storage, A, B,
+                                result, K, blockCount);
     } else {
-      matmul_dispatch_diagonal<VER, DMAX - 1>::d(temp_storage_bytes,
-                                                 d_temp_storage, A, B, result,
-                                                 M, N, K, blockCount);
+      matmul_dispatch_diagonal<DMAX - 1>::d(temp_storage_bytes, d_temp_storage,
+                                            A, B, result, M, N, K, blockCount);
     }
   }
 };
 
-template <typename VER>
-struct matmul_dispatch_diagonal<VER, 0> {
+template <>
+struct matmul_dispatch_diagonal<0> {
   void static d(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
                 double *B, double *result, const size_t M, const size_t N,
                 const size_t K, const int blockCount) {
     std::cout << "Invalid Zero or negative Matrix Size\n";
   }
 };
-*/

@@ -19,7 +19,7 @@ test: test.o
 perf: $(PREFIX)/perf$M-$N.o $(PREFIX)/matmul$M-$N.o
 	$(NVCC) -o $(PREFIX)/$@$M-$N $+ $(LDFLAGS)
 
-test.o:test.cu genv1.cuh genv2.cuh multi_dispatch.cuh
+test.o:test.cu genv1.cuh genv2.cuh genv3.cuh multi_dispatch.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
 $(PREFIX)/perf$M-$N.o:perf.cu
