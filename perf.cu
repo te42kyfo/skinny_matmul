@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
   double bestTime = 0;
   int bestBlockCount = 0;
 
-  for (size_t blockCount = 1*13; blockCount <= 8 * 13; blockCount += 13) {
+  for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
     int sampleSize = 1;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
@@ -114,8 +114,9 @@ int main(int argc, char** argv) {
       bestBlockCount = blockCount;
     }
   }
-  cout << M << " " << N << " " << K << "\t" << bestBlockCount << "\t" << setprecision(3)
-       << "\t" << bestTime << "\n";
+  cout << M << " " << N << " " << K << "\t" << bestBlockCount << "\t"
+       << setprecision(3) << "\t" << bestTime << "\t"
+       << M * N * K * 2 / bestTime * 1e-9 << "\n";
   cout.flush();
   deInitMatmul();
 }
