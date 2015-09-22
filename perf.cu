@@ -6,9 +6,15 @@
 #include <vector>
 #include <cuda_runtime.h>
 
-#include "matmul.cuh"
+#include "genv1.cuh"
+#include "genv2.cuh"
+#include "genv3.cuh"
 
 using namespace std;
+
+#ifndef GENVER
+#define GENVER GENV3
+#endif
 
 double dtime() {
   double tseconds = 0;
@@ -44,7 +50,7 @@ double* result;
 size_t temp_storage_bytes;
 
 void initMatmul(const size_t M, const size_t N, const size_t K,
-                const size_t blockCount) {
+                const int blockCount) {
   GPU_ERROR(cudaMalloc(&A, sizeof(double) * M * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(double) * N * K));
   initKernel << <52, 256>>> (A, M * K);
@@ -53,7 +59,8 @@ void initMatmul(const size_t M, const size_t N, const size_t K,
   temp_storage_bytes = 0;
   d_temp_storage = NULL;
   result = NULL;
-  matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K, blockCount);
+  GENVER::matmul<PARM, PARN>(temp_storage_bytes, d_temp_storage, A, B, result,
+                             K, blockCount);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
   GPU_ERROR(cudaMalloc(&result, sizeof(double) * M * N));
@@ -73,8 +80,8 @@ double measureMatmul(const size_t M, const size_t N, const size_t K,
   int iters = 1;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    matmul(temp_storage_bytes, d_temp_storage, A, B, result, M, N, K,
-           blockCount);
+    GENVER::matmul<PARM, PARN>(temp_storage_bytes, d_temp_storage, A, B, result,
+                               K, blockCount);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -100,7 +107,7 @@ int main(int argc, char** argv) {
   double bestTime = 0;
   int bestBlockCount = 0;
 
-  for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
+  for (int blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
     int sampleSize = 1;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
