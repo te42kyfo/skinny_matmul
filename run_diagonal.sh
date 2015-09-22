@@ -23,6 +23,6 @@ rm diag_$2.txt
 
 for d in {1..100}
 do
-    ./build/perf$d-$d | tee --append ./square_$2.txt
+    ./build/perf$d-$d | tee --append ./diag_$2.txt
 done
 
