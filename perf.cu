@@ -9,6 +9,7 @@
 #include "genv1.cuh"
 #include "genv2.cuh"
 #include "genv3.cuh"
+#include "genv4.cuh"
 
 using namespace std;
 

@@ -21,10 +21,10 @@ test: test.o
 perf: $(PREFIX)/perf$M-$N-$(GENVER).o
 	$(NVCC) -o $(PREFIX)/$@$M-$N-$(GENVER) $+ $(LDFLAGS)
 
-test.o:test.cu genv1.cuh genv2.cuh genv3.cuh multi_dispatch.cuh
+test.o:test.cu genv1.cuh genv2.cuh genv3.cuh genv4.cuh multi_dispatch.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
-$(PREFIX)/perf$M-$N-$(GENVER).o:perf.cu
+$(PREFIX)/perf$M-$N-$(GENVER).o:perf.cu genv?.cuh
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DGENVER=$(GENVER) $(INCLUDES) -o $@ -c $<
 
 $(PREFIX)/matmul$M-$N.o:matmul.cu matmul.cuh genv1.cuh
