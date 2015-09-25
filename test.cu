@@ -40,10 +40,26 @@ void cpuMatmul(double *A, double *B, double *result, const size_t M,
     for (size_t n = 0; n < N; n++) {
       double sum = 0;
       for (size_t k = 0; k < K; k++) {
-        sum += A[k * M + m] * B[n * K + k];
+        sum += A[k * M + m] * B[k * N + n];
       }
       result[n * M + m] = sum;
     }
+  }
+}
+
+void printMatrix(vector<double> m1, vector<double> m2, size_t N, size_t M,
+                 string matchColor = "\e[31m",
+                 string mismatchColor = "\e[32m") {
+  for (size_t n = 0; n < N; n++) {
+    for (size_t m = 0; m < M; m++) {
+      if (m1[n * M + m] == m2[n * M + m])
+        cout << matchColor;
+      else
+        cout << mismatchColor;
+
+      cout << m1[n * M + m] << "\e[0m\t";
+    }
+    cout << "\n";
   }
 }
 
@@ -120,28 +136,11 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
     if (hResult[i] != cpuResult[i]) {
       cout << "\e[31mMismatch\e[0m\n";
 
-      for (size_t n = 0; n < N; n++) {
-        for (size_t m = 0; m < M; m++) {
-          cout << hResult[n * M + m] << " \t";
-        }
-        cout << "\n";
-      }
+      printMatrix(hResult, cpuResult, N, M);
       cout << "--\n";
-
-      for (size_t n = 0; n < N; n++) {
-        for (size_t m = 0; m < M; m++) {
-          cout << hResult2[n * M + m] << " \t";
-        }
-        cout << "\n";
-      }
+      printMatrix(hResult2, hResult, N, M, "\e[34m");
       cout << "--\n";
-
-      for (size_t n = 0; n < N; n++) {
-        for (size_t m = 0; m < M; m++) {
-          cout << cpuResult[n * M + m] << " \t";
-        }
-        cout << "\n";
-      }
+      printMatrix(cpuResult, cpuResult, N, M, "\e[0m");
       cout << "--\n\n";
 
       passed = false;
@@ -159,14 +158,14 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 1;
 
-  for (size_t M = 1; M <= 100; M++) {
+  for (size_t M = 1; M <= 25; M++) {
     //    for (size_t N = 1; N <= 2; N++) {
     size_t N = M;
     size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.005;
     for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
       for (int t = 0; t < sampleSize; t++) {
         cout << M << "xKx" << N << "\t" << blockCount << "\t";
-        testMatmul<100, 100>(M, N, K, blockCount);
+        testMatmul<25, 25>(M, N, K, blockCount);
       }
     }
     //}
