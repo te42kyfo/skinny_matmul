@@ -52,35 +52,34 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
   for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     for (int n = 0; n < N; n++) {
-      threadSum[n] += A[idx * M + m] * B[idx + K * n];
+      threadSum[n] += A[idx * M + m] * B[idx * N + n];
     }
   }
-  #pragma unroll
+#pragma unroll
   for (int n = 0; n < N; n++) {
     blockStorage[threadIdx.x] = threadSum[n];
     __syncthreads();
-    int s = 1 << (sizeof(int)*8-__clz(BLOCKSIZE/M/2));
+    int s = 1 << (sizeof(int) * 8 - __clz(BLOCKSIZE / M / 2));
 
     //    if(tidx == 0)
     //  printf( "\n%d, %d \n", s, N);
 
-    if( threadIdx.x + s*M < BLOCKSIZE) {
-      blockStorage[threadIdx.x] += blockStorage[threadIdx.x+s*M];
+    if (threadIdx.x + s * M < BLOCKSIZE) {
+      blockStorage[threadIdx.x] += blockStorage[threadIdx.x + s * M];
     }
     __syncthreads();
 
-    for(s = s >> 1; s >= 1; s >>= 1) {
+    for (s = s >> 1; s >= 1; s >>= 1) {
       //      if(tidx == 0)
       //  printf( "%d, %d \n", s, N);
-      if( threadIdx.x < s*M) {
-        blockStorage[threadIdx.x] += blockStorage[threadIdx.x+s*M];
+      if (threadIdx.x < s * M) {
+        blockStorage[threadIdx.x] += blockStorage[threadIdx.x + s * M];
       }
       __syncthreads();
     }
-    if( threadIdx.x < M) {
+    if (threadIdx.x < M) {
       out[blockIdx.x * M * N + n * M + m] = blockStorage[threadIdx.x];
     }
-
   }
 }
 
