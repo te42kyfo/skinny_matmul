@@ -3,7 +3,7 @@ NVCC := nvcc
 # internal flags
 NVCCFLAGS   := -O3 -arch=sm_35  --compiler-options="-O2 -pipe -march=native -Wall -fopenmp"
 CCFLAGS     :=
-LDFLAGS     := -L/opt/cuda/lib64
+LDFLAGS     := -L/opt/cuda/lib64 -lcublas
 INCLUDES 	:= -I/home/hpc/ihpc/ihpc05/cub/
 NAME 		:= skinny_matmul
 M 			:= 1

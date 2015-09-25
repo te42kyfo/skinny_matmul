@@ -11,6 +11,7 @@
 #include "genv2.cuh"
 #include "genv3.cuh"
 #include "genv4.cuh"
+#include "gen_cublas.cuh"
 #include "multi_dispatch.cuh"
 
 using namespace std;
@@ -48,8 +49,8 @@ void cpuMatmul(double *A, double *B, double *result, const size_t M,
 }
 
 void printMatrix(vector<double> m1, vector<double> m2, size_t N, size_t M,
-                 string matchColor = "\e[31m",
-                 string mismatchColor = "\e[32m") {
+                 string matchColor = "\e[32m",
+                 string mismatchColor = "\e[31m") {
   for (size_t n = 0; n < N; n++) {
     for (size_t m = 0; m < M; m++) {
       if (m1[n * M + m] == m2[n * M + m])

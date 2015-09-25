@@ -10,6 +10,7 @@
 #include "genv2.cuh"
 #include "genv3.cuh"
 #include "genv4.cuh"
+#include "gen_cublas.cuh"
 
 using namespace std;
 
