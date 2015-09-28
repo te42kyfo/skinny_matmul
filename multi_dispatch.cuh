@@ -22,7 +22,7 @@ struct matmul_dispatch {
                 double *B, double *result, const size_t M, const size_t N,
                 const size_t K, const int blockCount) {
     if (N == NMAX) {
-      GENV1::matmul<MMAX, NMAX>(temp_storage_bytes, d_temp_storage, A, B,
+      GENV3::matmul<MMAX, NMAX>(temp_storage_bytes, d_temp_storage, A, B,
                                 result, K, blockCount);
     } else {
       matmul_dispatch<MMAX, NMAX - 1>::n(temp_storage_bytes, d_temp_storage, A,
