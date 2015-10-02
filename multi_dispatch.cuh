@@ -71,7 +71,7 @@ struct matmul_dispatch_diagonal {
     if (M != N) {
       std::cout << "M != N, can't use diagonal dispatch\n";
     } else if (DMAX == M) {
-      GEN_CUBLAS::matmul<DMAX, DMAX>(temp_storage_bytes, d_temp_storage, A, B,
+      GENV4::matmul<DMAX, DMAX>(temp_storage_bytes, d_temp_storage, A, B,
                                 result, K, blockCount);
     } else {
       matmul_dispatch_diagonal<DMAX - 1>::d(temp_storage_bytes, d_temp_storage,

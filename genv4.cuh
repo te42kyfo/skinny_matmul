@@ -74,11 +74,19 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
 template <int M, int N>
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
-            double *B, double *result, const size_t K, const int blockCount) {
+            double *B, double *result, const size_t K, int blockCount) {
+  if(M*N > blockCount*256) {
+    std::cout << "blockcount:" << blockCount << " -> ";
+    blockCount = M*N/256+1;
+    std::cout << blockCount << "\n";
+  }
+
   if (temp_storage_bytes == 0) {
     temp_storage_bytes = blockCount * sizeof(double) * M * N;
     return;
   }
+  cudaMemset( d_temp_storage, 0, temp_storage_bytes);
+
   if (N > M) {
     GENV4::blockProductKernel<N, M, 256, true><<<blockCount, 256>>>(
         B, A, d_temp_storage, K);
