@@ -32,32 +32,30 @@ __global__ void deviceReduce(double *blockResults, double *result,
   result[n * M + m] = sum;
 }
 
-template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
+  template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
 __global__ void blockProductKernel(double *A, double *B, double *out,
                                    size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ double blockStorage[BLOCKSIZE];
+  __shared__ double bcache[BLOCKSIZE/32][32/M+2];
 
   blockStorage[threadIdx.x] = 0.0;
 
-  int row = tidx / M;
   int m = tidx % M;
+  int warpNum = threadIdx.x/32;
+
+  if (blockDim.x * gridDim.x / M == tidx / M) return;
 
   double threadSum[N];
   for (int n = 0; n < N; n++) {
     threadSum[n] = 0;
   }
 
-  int iterStride = blockDim.x * gridDim.x / M;
-  int iterCount = K / iterStride + 1;
-  for (size_t idx = 0; idx < iterCount; idx++) {
-    int k = idx * iterStride + row;
+  for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     for (int n = 0; n < N; n++) {
-      //     __syncthreads();
-      if (blockDim.x * gridDim.x / M != tidx / M && k < K) {
-        threadSum[n] += A[k * M + m] * B[k * N + n];
-      }
+      bcache[warpNum][idx%(32/M+2)] = B[idx * N + n];
+      threadSum[n] += A[idx * M + m] * bcache[warpNum][idx%(32/M+2)];
     }
   }
 
@@ -71,7 +69,7 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
       for (int i = threadIdx.x; i < BLOCKSIZE; i += M) {
         blockSum += blockStorage[i];
       }
-      if (TRANSPOSE) {
+      if(TRANSPOSE) {
         out[blockIdx.x * M * N + m * N + n] = blockSum;
       } else {
         out[blockIdx.x * M * N + n * M + m] = blockSum;
@@ -87,14 +85,14 @@ void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
     temp_storage_bytes = blockCount * sizeof(double) * M * N;
     return;
   }
-  if (N > M) {
-    GENV3::blockProductKernel<N, M, 256, true><<<blockCount, 256>>>(
-        B, A, d_temp_storage, K);
+  if( N > M ){
+    GENV3::blockProductKernel<N, M, 256, true> << <blockCount, 256>>>
+      (B, A, d_temp_storage, K);
   } else {
-    GENV3::blockProductKernel<M, N, 256, false><<<blockCount, 256>>>(
-        A, B, d_temp_storage, K);
+    GENV3::blockProductKernel<M, N, 256, false> << <blockCount, 256>>>
+      (A, B, d_temp_storage, K);
   }
-  GENV3::deviceReduce<M, N><<<M * N / 256 + 1, 256>>>(d_temp_storage, result,
-                                                      blockCount);
+  GENV3::deviceReduce<M, N> << <M * N / 256 + 1, 256>>>
+      (d_temp_storage, result, blockCount);
 }
 }
