@@ -38,7 +38,7 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ double blockStorage[BLOCKSIZE];
-  __shared__ double bcache[BLOCKSIZE/32][32/M+2];
+  __shared__ double bcache[BLOCKSIZE/32][32/M+2][N];
 
   blockStorage[threadIdx.x] = 0.0;
 
@@ -54,8 +54,10 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
   for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     for (int n = 0; n < N; n++) {
-      bcache[warpNum][idx%(32/M+2)] = B[idx * N + n];
-      threadSum[n] += A[idx * M + m] * bcache[warpNum][idx%(32/M+2)];
+      bcache[warpNum][idx%(32/M+2)][n] = B[idx * N + n];
+    }
+    for (int n = 0; n < N; n++) {
+      threadSum[n] += A[idx * M + m] * bcache[warpNum][idx%(32/M+2)][n];
     }
   }
 
