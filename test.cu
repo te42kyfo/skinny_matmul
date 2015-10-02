@@ -85,20 +85,12 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   static int salt = 0;
   srand(time(NULL) + salt++);
 
-  int start = rand();
-#pragma omp parallel num_threads(10)
-  {
-    int randstate = start + omp_get_thread_num();
-#pragma omp for
-    for (size_t i = 0; i < M * K; i++) {
-      randstate = (randstate * 7 + 11) % 101;
-      hA[i] = randstate % 3 - 1;
-    }
-#pragma omp for
-    for (size_t i = 0; i < N * K; i++) {
-      randstate = (randstate * 7 + 11) % 101;
-      hB[i] = randstate % 3 - 1;
-    }
+  for (size_t i = 0; i < M * K; i++) {
+    hA[i] = rand() % 3 - 1;
+  }
+
+  for (size_t i = 0; i < N * K; i++) {
+    hB[i] = rand() % 3 - 1;
   }
 
   GPU_ERROR(
@@ -109,7 +101,7 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   size_t temp_storage_bytes = 0;
   d_temp_storage = NULL;
   matmul_dispatch<MMAX, NMAX>::m(temp_storage_bytes, d_temp_storage, A, B,
-                                    result, M, N, K, blockCount);
+                                 result, M, N, K, blockCount);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
 
@@ -117,12 +109,12 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
   cout.flush();
 
   matmul_dispatch<MMAX, NMAX>::m(temp_storage_bytes, d_temp_storage, A, B,
-                                    result, M, N, K, blockCount);
+                                 result, M, N, K, blockCount);
   GPU_ERROR(cudaMemcpy(hResult.data(), result, sizeof(double) * M * N,
                        cudaMemcpyDefault));
 
   matmul_dispatch<MMAX, NMAX>::m(temp_storage_bytes, d_temp_storage, A, B,
-                                    result, M, N, K, blockCount);
+                                 result, M, N, K, blockCount);
 
   GPU_ERROR(cudaMemcpy(hResult2.data(), result, sizeof(double) * M * N,
                        cudaMemcpyDefault));

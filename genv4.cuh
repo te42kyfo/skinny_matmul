@@ -32,7 +32,7 @@ __global__ void deviceReduce(double *blockResults, double *result,
   result[n * M + m] = sum;
 }
 
-template <int M, int N, int BLOCKSIZE>
+template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
 __global__ void blockProductKernel(double *A, double *B, double *out,
                                    size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -42,46 +42,35 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
   blockStorage[threadIdx.x] = 0.0;
 
   int m = tidx % M;
+  int n = (tidx / M) % N;
 
-  if (blockDim.x * gridDim.x / M == tidx / M) return;
+  if (blockDim.x * gridDim.x / M / N == tidx / M / N) return;
 
-  double threadSum[N];
-  for (int n = 0; n < N; n++) {
-    threadSum[n] = 0;
+  double threadSum;
+  threadSum = 0;
+
+  for (size_t idx = tidx / M / N; idx < K;
+       idx += blockDim.x * gridDim.x / M / N) {
+    threadSum += A[idx * M + m] * B[idx * N + n];
   }
 
-  for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
-    for (int n = 0; n < N; n++) {
-      threadSum[n] += A[idx * M + m] * B[idx * N + n];
-    }
-  }
-#pragma unroll
-  for (int n = 0; n < N; n++) {
-    blockStorage[threadIdx.x] = threadSum[n];
-    __syncthreads();
-    int s = 1 << (sizeof(int) * 8 - __clz(BLOCKSIZE / M / 2));
+  __syncthreads();
+  blockStorage[threadIdx.x] = threadSum;
+  __syncthreads();
 
-    //    if(tidx == 0)
-    //  printf( "\n%d, %d \n", s, N);
-
-    if (threadIdx.x + s * M < BLOCKSIZE) {
-      blockStorage[threadIdx.x] += blockStorage[threadIdx.x + s * M];
+  if (threadIdx.x < M * N) {
+    double blockSum = 0.0;
+    for (int i = threadIdx.x; i < BLOCKSIZE; i += M * N) {
+      blockSum += blockStorage[i];
     }
-    __syncthreads();
-
-    for (s = s >> 1; s >= 1; s >>= 1) {
-      //      if(tidx == 0)
-      //  printf( "%d, %d \n", s, N);
-      if (threadIdx.x < s * M) {
-        blockStorage[threadIdx.x] += blockStorage[threadIdx.x + s * M];
-      }
-      __syncthreads();
-    }
-    if (threadIdx.x < M) {
-      out[blockIdx.x * M * N + n * M + m] = blockStorage[threadIdx.x];
+    if (TRANSPOSE) {
+      out[blockIdx.x * M * N + m * N + n] = blockSum;
+    } else {
+      out[blockIdx.x * M * N + n * M + m] = blockSum;
     }
   }
 }
+
 
 template <int M, int N>
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
@@ -90,10 +79,14 @@ void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
     temp_storage_bytes = blockCount * sizeof(double) * M * N;
     return;
   }
-  GENV4::blockProductKernel<M, N, 256> << <blockCount, 256>>>
-      (A, B, d_temp_storage, K);
-
-  GENV4::deviceReduce<M, N> << <M * N / 256 + 1, 256>>>
-      (d_temp_storage, result, blockCount);
+  if (N > M) {
+    GENV4::blockProductKernel<N, M, 256, true><<<blockCount, 256>>>(
+        B, A, d_temp_storage, K);
+  } else {
+    GENV4::blockProductKernel<M, N, 256, false><<<blockCount, 256>>>(
+        A, B, d_temp_storage, K);
+  }
+  GENV4::deviceReduce<M, N><<<M * N / 256 + 1, 256>>>(d_temp_storage, result,
+                                                      blockCount);
 }
 }
