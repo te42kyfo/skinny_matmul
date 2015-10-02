@@ -76,9 +76,7 @@ template <int M, int N>
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
             double *B, double *result, const size_t K, int blockCount) {
   if(M*N > blockCount*256) {
-    std::cout << "blockcount:" << blockCount << " -> ";
     blockCount = M*N/256+1;
-    std::cout << blockCount << "\n";
   }
 
   if (temp_storage_bytes == 0) {
