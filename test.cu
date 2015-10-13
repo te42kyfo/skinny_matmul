@@ -101,21 +101,24 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 
   size_t temp_storage_bytes = 0;
   d_temp_storage = NULL;
-  matmul_dispatch_diagonal<NMAX>::d(temp_storage_bytes, d_temp_storage, A, B,
-                                    result, M, N, K, blockCount);
+  //  matmul_dispatch_diagonal<NMAX>::d(temp_storage_bytes, d_temp_storage, A,
+  //  B,
+  //                                  result, M, N, K, blockCount);
+  matmul_dispatch<MMAX, NMAX>::m(temp_storage_bytes, d_temp_storage, A, B,
+                                 result, M, N, K, blockCount);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
 
   cout << "GPU, ";
   cout.flush();
+  matmul_dispatch<MMAX, NMAX>::m(temp_storage_bytes, d_temp_storage, A, B,
+                                 result, M, N, K, blockCount);
 
-  matmul_dispatch_diagonal<NMAX>::d(temp_storage_bytes, d_temp_storage, A, B,
-                                    result, M, N, K, blockCount);
   GPU_ERROR(cudaMemcpy(hResult.data(), result, sizeof(double) * M * N,
                        cudaMemcpyDefault));
 
-  matmul_dispatch_diagonal<NMAX>::d(temp_storage_bytes, d_temp_storage, A, B,
-                                    result, M, N, K, blockCount);
+  matmul_dispatch<MMAX, NMAX>::m(temp_storage_bytes, d_temp_storage, A, B,
+                                 result, M, N, K, blockCount);
 
   GPU_ERROR(cudaMemcpy(hResult2.data(), result, sizeof(double) * M * N,
                        cudaMemcpyDefault));
@@ -153,16 +156,15 @@ void testMatmul(const size_t M, const size_t N, const size_t K,
 int main(int argc, char **argv) {
   int sampleSize = 1;
 
-  for (size_t M = 1; M <= 100; M++) {
-    size_t N = M;
-    //    for (size_t N = 1; N <= 10; N++) {
-    size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.01;
-    for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
-      for (int t = 0; t < sampleSize; t++) {
-        cout << M << "xKx" << N << "\t" << blockCount << "\t";
-        testMatmul<100, 100>(M, N, K, blockCount);
+  for (size_t M = 1; M <= 32; M++) {
+    for (size_t N = 1; N <= 32; N++) {
+      size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.01;
+      for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
+        for (int t = 0; t < sampleSize; t++) {
+          cout << M << "xKx" << N << "\t" << blockCount << "\t";
+          testMatmul<32, 32>(M, N, K, blockCount);
+        }
       }
-      //}
     }
   }
   cout.flush();
