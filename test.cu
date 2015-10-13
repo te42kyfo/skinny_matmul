@@ -11,6 +11,7 @@
 #include "genv2.cuh"
 #include "genv3.cuh"
 #include "genv4.cuh"
+#include "genv5.cuh"
 #include "gen_cublas.cuh"
 #include "multi_dispatch.cuh"
 

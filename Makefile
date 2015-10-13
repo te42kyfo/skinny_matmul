@@ -21,7 +21,7 @@ test: test.o
 perf: perf.cu genv?.cuh
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DGENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS)
 
-test.o:test.cu genv1.cuh genv2.cuh genv3.cuh genv4.cuh multi_dispatch.cuh
+test.o:test.cu genv1.cuh genv2.cuh genv3.cuh genv4.cuh genv5.cuh multi_dispatch.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ -c $<
 
 
