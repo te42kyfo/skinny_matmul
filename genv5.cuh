@@ -41,17 +41,26 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
   blockStorage[threadIdx.x] = 0.0;
 
-  int warpId = tidx / 32;
-  int warpLane = tidx % 32;
+  int warpsPerColumn = (M - 1) / 32 + 1;
+  int columnsPerBlock = BLOCKSIZE / 32 / warpsPerColumn;
+
+
+  int m = threadIdx.x % (warpsPerColumn*32);
 
   double threadSum[N];
   for (int n = 0; n < N; n++) {
     threadSum[n] = 0;
   }
 
-  for (size_t k = warpId; k < K; k += blockDim.x * gridDim.x / 32) {
+  //  if(tidx == 0) print( "%d, %d", warpsPerColumn, columnsPerBlock);
+
+  if (columnsPerBlock * warpsPerColumn * 32 < threadIdx.x) return;
+
+  for (size_t k =
+           blockIdx.x * columnsPerBlock + threadIdx.x / warpsPerColumn / 32;
+       k < K; k += gridDim.x * columnsPerBlock) {
     for (int n = 0; n < N; n++) {
-      threadSum[n] += A[k * M + warpLane] * B[k * N + n];
+      threadSum[n] += A[k * M + m] * B[k * N + n];
     }
   }
 
@@ -62,10 +71,11 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
     if (threadIdx.x < M) {
       double blockSum = 0.0;
-      for (int i = threadIdx.x; i < BLOCKSIZE; i += 32) {
+      for (int i = threadIdx.x; i < columnsPerBlock * warpsPerColumn * 32;
+           i += 32 * warpsPerColumn) {
         blockSum += blockStorage[i];
       }
-      out[blockIdx.x * M * N + n * M + warpLane] = blockSum;
+      out[blockIdx.x * M * N + n * M + m] = blockSum;
     }
   }
 }
