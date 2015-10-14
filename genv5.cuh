@@ -51,7 +51,7 @@ __global__ void blockProductKernel(double *A, double *B, double *out,
 
   for (size_t k = warpId; k < K; k += blockDim.x * gridDim.x / 32) {
     for (int n = 0; n < N; n++) {
-      if (warpLane < M) threadSum[n] += A[k * M + warpLane] * B[k * N + n];
+      threadSum[n] += A[k * M + warpLane] * B[k * N + n];
     }
   }
 
