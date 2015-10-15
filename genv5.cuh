@@ -35,32 +35,34 @@ __global__ void deviceReduce(double *blockResults, double *result,
 template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
 __global__ void blockProductKernel(double *A, double *B, double *out,
                                    size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  int const warpsPerColumn = (M - 1) / 32 + 1;
+  int const columnsPerBlock = BLOCKSIZE / 32 / warpsPerColumn;
 
+  int warpLane = threadIdx.x % 32;
+  int warpId = threadIdx.x / 32;
+
+  __shared__ double rowCache[BLOCKSIZE / 32][N];
   __shared__ double blockStorage[BLOCKSIZE];
 
   blockStorage[threadIdx.x] = 0.0;
 
-  int warpsPerColumn = (M - 1) / 32 + 1;
-  int columnsPerBlock = BLOCKSIZE / 32 / warpsPerColumn;
-
-
-  int m = threadIdx.x % (warpsPerColumn*32);
+  int m = threadIdx.x % (warpsPerColumn * 32);
 
   double threadSum[N];
   for (int n = 0; n < N; n++) {
     threadSum[n] = 0;
   }
 
-  //  if(tidx == 0) print( "%d, %d", warpsPerColumn, columnsPerBlock);
-
   if (columnsPerBlock * warpsPerColumn * 32 < threadIdx.x) return;
 
   for (size_t k =
            blockIdx.x * columnsPerBlock + threadIdx.x / warpsPerColumn / 32;
        k < K; k += gridDim.x * columnsPerBlock) {
+    for (int n = warpLane; n < N; n += 32) {
+      rowCache[warpId][n] = B[k * N + n];
+    }
     for (int n = 0; n < N; n++) {
-      threadSum[n] += A[k * M + m] * B[k * N + n];
+      threadSum[n] += A[k * M + m] * rowCache[warpId][n];
     }
   }
 
