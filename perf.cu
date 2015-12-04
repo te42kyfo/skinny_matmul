@@ -8,6 +8,12 @@
 
 #include "skyblas.cuh"
 
+
+#if !defined PARM || !defined PARN
+#error "PARM or PARN is not specified! Specify M and N to measure"
+#endif
+
+
 using namespace std;
 
 double dtime() {
@@ -78,7 +84,7 @@ void deInitMatmul() {
 }
 
 double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
-                     int M, int N, int K, int lda, int ldb, int ldc,
+                     size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                      size_t blockCount) {
   GPU_ERROR(cudaDeviceSynchronize());
 
