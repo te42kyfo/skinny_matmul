@@ -15,7 +15,7 @@ namespace Skyblas {
 
 enum MEMORY_ORDER { ROW, COLUMN };
 
-template <size_t TN, size_t TM>
+template <size_t TM, size_t TN>
 void dgemm(size_t &temp_storage_bytes, double *d_temp_storage,
            const size_t blockCount, const MEMORY_ORDER AOrder,
            const MEMORY_ORDER BOrder, const int M, const int N, const int K,
@@ -23,7 +23,8 @@ void dgemm(size_t &temp_storage_bytes, double *d_temp_storage,
            const int ldb, const double beta, double *C, const int ldc) {
   if (TM == M && TN == N) {
     if (AOrder == Skyblas::COLUMN && BOrder == Skyblas::ROW) {
-      std::cout << "Kernel 1\n";
+      GENV3::matmul<TM, TN>(temp_storage_bytes, d_temp_storage, blockCount, K,
+                            alpha, A, lda, B, ldb, beta, C, ldc);
     } else {
       std::cout << "Wrong memory Ordering\n";
       return;
