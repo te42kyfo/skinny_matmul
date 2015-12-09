@@ -16,7 +16,8 @@ __device__ inline double double_shfl_xor(double var, unsigned int srcLane,
 
 template <int M, int N>
 __global__ void deviceReduce(double *blockResults, double *result, double alpha,
-                             double beta, int blockCount) {
+                             double beta, int blockCount, size_t lda,
+                             size_t ldb, size_t ldc) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (tidx >= M * N) return;
@@ -26,15 +27,16 @@ __global__ void deviceReduce(double *blockResults, double *result, double alpha,
 
   double sum = 0.0;
   for (int i = 0; i < blockCount; i++) {
-    sum += blockResults[i * M * N + n * M + m];
+    sum += blockResults[i * M * ldc + m * ldc + n];
   }
 
-  result[n * M + m] = result[n * M + m] * beta + sum * alpha;
+  result[m * ldc + n] = result[m * ldc + n] * beta + sum * alpha;
 }
 
 template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
 __global__ void blockProductKernel(const double *A, const double *B,
-                                   double *out, size_t K) {
+                                   double *out, size_t K, size_t lda,
+                                   size_t ldb, size_t ldc) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ double blockStorage[BLOCKSIZE];
@@ -52,7 +54,7 @@ __global__ void blockProductKernel(const double *A, const double *B,
 
   for (size_t idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     for (int n = 0; n < N; n++) {
-      threadSum[n] += A[idx * M + m] * B[idx * N + n];
+      threadSum[n] += A[idx * lda + m] * B[idx * ldb + n];
     }
   }
 
@@ -67,9 +69,9 @@ __global__ void blockProductKernel(const double *A, const double *B,
         blockSum += blockStorage[i];
       }
       if (TRANSPOSE) {
-        out[blockIdx.x * M * N + m * N + n] = blockSum;
+        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
       } else {
-        out[blockIdx.x * M * N + n * M + m] = blockSum;
+        out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
       }
     }
   }
@@ -81,17 +83,17 @@ void matmul(size_t &temp_storage_bytes, double *d_temp_storage,
             const double *A, const int lda, const double *B, const int ldb,
             const double beta, double *C, const int ldc) {
   if (temp_storage_bytes == 0) {
-    temp_storage_bytes = blockCount * sizeof(double) * M * N;
+    temp_storage_bytes = blockCount * sizeof(double) * M * ldc;
     return;
   }
   if (N > M) {
     GENV3::blockProductKernel<N, M, 256, true><<<blockCount, 256>>>(
-        B, A, d_temp_storage, K);
+        B, A, d_temp_storage, K, ldb, lda, ldc);
   } else {
     GENV3::blockProductKernel<M, N, 256, false><<<blockCount, 256>>>(
-        A, B, d_temp_storage, K);
+        A, B, d_temp_storage, K, lda, ldb, ldc);
   }
-  GENV3::deviceReduce<M, N><<<M * N / 256 + 1, 256>>>(d_temp_storage, C, alpha,
-                                                      beta, blockCount);
+  GENV3::deviceReduce<M, N><<<M * N / 256 + 1, 256>>>(
+      d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
 }
 }
