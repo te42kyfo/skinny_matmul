@@ -39,14 +39,14 @@ void cpuDgemm(const Skyblas::MEMORY_ORDER AOrder,
               const size_t N, const size_t K, const double alpha,
               const double *A, const int lda, const double *B, const int ldb,
               const double beta, double *C, const int ldc) {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
   for (size_t m = 0; m < M; m++) {
     for (size_t n = 0; n < N; n++) {
       double sum = 0;
       for (size_t k = 0; k < K; k++) {
         sum += A[k * lda + m] * B[k * ldb + n];
       }
-      C[n * ldc + m] = C[n * ldc + m] * beta + alpha * sum;
+      C[m * ldc + n] = C[m * ldc + n] * beta + alpha * sum;
     }
   }
 }
@@ -72,7 +72,7 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 size_t blockCount) {
   double *A, *B, *d_temp_storage, *C;
 
-  double alpha = 0.0;
+  double alpha = 0.5;
   double beta = 0.5;
 
   cout << "Setup, ";
@@ -147,7 +147,7 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 
   bool passed = true;
   for (size_t n = 0; n < N; n++) {
-    for (size_t m = 0; n < M; m++) {
+    for (size_t m = 0; m < M; m++) {
       if (hC[m * ldc + n] != cpuC[m * ldc + n]) {
         cout << "\e[31mMismatch\e[0m\n";
 
