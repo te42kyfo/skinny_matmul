@@ -23,8 +23,9 @@ void dgemm(size_t &temp_storage_bytes, double *d_temp_storage,
            const int ldb, const double beta, double *C, const int ldc) {
   if (TM == M && TN == N) {
     if (AOrder == Skyblas::COLUMN && BOrder == Skyblas::ROW) {
-      GENV3::matmul<TM, TN>(temp_storage_bytes, d_temp_storage, blockCount, K,
-                            alpha, A, lda, B, ldb, beta, C, ldc);
+      SKYBLAS_GENVER::matmul<TM, TN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, K, alpha, A, lda, B, ldb, beta,
+                                     C, ldc);
     } else {
       std::cout << "Wrong memory Ordering\n";
       return;

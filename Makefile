@@ -19,10 +19,10 @@ runperf: perf
 	$(PREFIX)/$<$M-$N-$(GENVER)
 
 perf: perf.cu genv?.cuh skyblas.cuh
-	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DGENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS)
+	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS)
 
 test: test.cu genv?.cuh skyblas.cuh
-	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DGENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS) --compiler-options="-fopenmp"
+	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS) --compiler-options="-fopenmp  -g"
 
 
 clean:
