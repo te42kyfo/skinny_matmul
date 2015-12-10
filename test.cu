@@ -162,6 +162,7 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
         break;
       }
     }
+    if (!passed) break;
   }
   if (passed) cout << "\e[32mPassed\e[0m (" << cpuC[N * M / 2] << ")\n";
 
