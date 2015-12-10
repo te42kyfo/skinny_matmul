@@ -4,20 +4,31 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
-namespace {
+namespace GENV1 {
 
-static __device__ inline double double_shfl_xor(double var,
-                                                unsigned int srcLane,
-                                                int width = 32) {
-  int2 a = *reinterpret_cast<int2 *>(&var);
-  a.x = __shfl_xor(a.x, srcLane, width);
-  a.y = __shfl_xor(a.y, srcLane, width);
-  return *reinterpret_cast<double *>(&a);
+template <int M, int N>
+__global__ void deviceReduce(double *blockResults, double *result, double alpha,
+                             double beta, int blockCount, size_t lda,
+                             size_t ldb, size_t ldc) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (tidx >= M * N) return;
+
+  int n = tidx / M;
+  int m = tidx % M;
+
+  double sum = 0.0;
+  for (int i = 0; i < blockCount; i++) {
+    sum += blockResults[i * M * ldc + m * ldc + n];
+  }
+
+  result[m * ldc + n] = result[m * ldc + n] * beta + sum * alpha;
 }
 
 template <int M, int N, int BLOCKSIZE>
-static __global__ void blockProductKernel(double *A, double *B, double *out,
-                                          size_t K) {
+__global__ void blockProductKernel(const double *A, const double *B,
+                                   double *out, size_t K, size_t lda,
+                                   size_t ldb, size_t ldc) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   double threadSum[M][N];
@@ -31,7 +42,7 @@ static __global__ void blockProductKernel(double *A, double *B, double *out,
   for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        threadSum[m][n] += A[idx * M + m] * B[idx * N + n];
+        threadSum[m][n] += A[idx * lda + m] * B[idx * ldb + n];
       }
     }
   }
@@ -50,37 +61,27 @@ static __global__ void blockProductKernel(double *A, double *B, double *out,
   if (threadIdx.x == 0) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        out[blockIdx.x + gridDim.x * (n * M + m)] = blockSum[m][n];
+        out[blockIdx.x * M * ldc + m * ldc + n] = blockSum[m][n];
       }
     }
   }
 }
-}
 
-namespace GENV1 {
 template <int M, int N>
 void matmul(size_t &temp_storage_bytes, double *d_temp_storage,
-                   double *A, double *B, double *result, const size_t K,
-                   const int blockCount) {
+            const size_t blockCount, const int K, const double alpha,
+            const double *A, const int lda, const double *B, const int ldb,
+            const double beta, double *C, const int ldc) {
   if (temp_storage_bytes == 0) {
     cudaFuncSetCacheConfig(blockProductKernel<M, N, 256>,
                            cudaFuncCachePreferL1);
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_temp_storage,
-                           result, blockCount);
-    temp_storage_bytes =
-        (temp_storage_bytes + blockCount * sizeof(double)) * M * N;
+    temp_storage_bytes = blockCount * sizeof(double) * M * ldc;
     return;
   }
-  blockProductKernel<M, N, 256> << <blockCount, 256>>>
-      (A, B, d_temp_storage, K);
+  GENV1::blockProductKernel<M, N, 256><<<blockCount, 256>>>(
+      A, B, d_temp_storage, K, lda, ldb, ldc);
 
-  for (int m = 0; m < M; m++) {
-    for (int n = 0; n < N; n++) {
-      cub::DeviceReduce::Sum(d_temp_storage + (M * N) * blockCount,
-                             temp_storage_bytes,
-                             d_temp_storage + blockCount * (n * M + m),
-                             result + (n * M + m), blockCount);
-    }
-  }
+  GENV1::deviceReduce<M, N><<<M * N / 256 + 1, 256>>>(
+      d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
 }
 }
