@@ -72,8 +72,8 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 size_t blockCount) {
   double *A, *B, *d_temp_storage, *C;
 
-  double alpha = 0.5;
-  double beta = 0.5;
+  double alpha = 1.0;
+  double beta = 2.0;
 
   cout << "Setup, ";
   cout.flush();
