@@ -1,14 +1,23 @@
 #include <iostream>
 
-#include "genv1.cuh"
-#include "genv2.cuh"
-#include "genv3.cuh"
-#include "genv4.cuh"
-#include "genv5.cuh"
-#include "gen_cublas.cuh"
-
 #ifndef SKYBLAS_GENVER
 #define SKYBLAS_GENVER GENV3
+#endif
+
+#if SKYBLAS_GENVER == GENV1
+#include "genv1.cuh"
+#endif
+#if SKYBLAS_GENVER == GENV3
+#include "genv3.cuh"
+#endif
+#if SKYBLAS_GENVER == GENV4
+#include "genv4.cuh"
+#endif
+#if SKYBLAS_GENVER == GENV5
+#include "genv5.cuh"
+#endif
+#if SKYBLAS_GENVER == GEN_CUBLAS
+#include "gen_cublas.cuh"
 #endif
 
 namespace Skyblas {
