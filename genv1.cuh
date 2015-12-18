@@ -19,10 +19,10 @@ __global__ void deviceReduce(double *blockResults, double *result, double alpha,
 
   double sum = 0.0;
   for (int i = 0; i < blockCount; i++) {
-    sum += blockResults[i * M * ldc + m * ldc + n];
+    sum += blockResults[i * N * ldc + n * ldc + m];
   }
 
-  result[m * ldc + n] = result[m * ldc + n] * beta + sum * alpha;
+  result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
 template <int M, int N, int BLOCKSIZE>
@@ -61,7 +61,7 @@ __global__ void blockProductKernel(const double *A, const double *B,
   if (threadIdx.x == 0) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        out[blockIdx.x * M * ldc + m * ldc + n] = blockSum[m][n];
+        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum[m][n];
       }
     }
   }
@@ -75,7 +75,7 @@ void matmul(size_t &temp_storage_bytes, double *d_temp_storage,
   if (temp_storage_bytes == 0) {
     cudaFuncSetCacheConfig(blockProductKernel<M, N, 256>,
                            cudaFuncCachePreferL1);
-    temp_storage_bytes = blockCount * sizeof(double) * M * ldc;
+    temp_storage_bytes = blockCount * sizeof(double) * N * ldc;
     return;
   }
   GENV1::blockProductKernel<M, N, 256><<<blockCount, 256>>>(
