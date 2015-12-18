@@ -1,7 +1,7 @@
 NVCC := nvcc
 
 # internal flags
-NVCCFLAGS   := -O3 -arch=sm_35 --compiler-options="-O2 -pipe -march=native -Wall -fopenmp" -Xcompiler -rdynamic -lineinfo
+NVCCFLAGS   := -O3 -arch=sm_35 --compiler-options="-O2 -pipe -march=native -Wall -fopenmp" -Xcompiler -rdynamic --generate-line-info
 CCFLAGS     :=
 LDFLAGS     := -L/opt/cuda/lib64 -lcublas
 INCLUDES 	:= -I/home/hpc/ihpc/ihpc05/cub/
@@ -18,13 +18,13 @@ runtest: $(PREFIX)/test$M-$N-$(GENVER)
 runperf: perf
 	$(PREFIX)/$<$M-$N-$(GENVER)
 
-perf: perf.cu genv?.cuh skyblas.cuh
+perf: perf.cu genv?.cuh skyblas.cuh Makefile
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS)
 
 
 test: $(PREFIX)/test$M-$N-$(GENVER)
 
-$(PREFIX)/test$M-$N-$(GENVER): test.cu genv?.cuh skyblas.cuh
+$(PREFIX)/test$M-$N-$(GENVER): test.cu genv?.cuh skyblas.cuh Makefile
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
 
 
