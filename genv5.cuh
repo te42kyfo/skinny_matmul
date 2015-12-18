@@ -42,12 +42,12 @@ __global__ void blockProductKernel(const double *A, const double *B,
 
   int m = threadIdx.x % (warpsPerColumn * 32);
 
+  if (m > M) m = 0;
+
   double threadSum[N];
   for (int n = 0; n < N; n++) {
     threadSum[n] = 0;
   }
-
-  if (columnsPerBlock * warpsPerColumn * 32 < threadIdx.x) return;
 
   for (size_t k =
            blockIdx.x * columnsPerBlock + threadIdx.x / warpsPerColumn / 32;
