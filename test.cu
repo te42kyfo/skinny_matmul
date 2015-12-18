@@ -46,7 +46,7 @@ void cpuDgemm(const Skyblas::MEMORY_ORDER AOrder,
       for (size_t k = 0; k < K; k++) {
         sum += A[k * lda + m] * B[k * ldb + n];
       }
-      C[m * ldc + n] = C[m * ldc + n] * beta + alpha * sum;
+      C[n * ldc + m] = C[n * ldc + m] * beta + alpha * sum;
     }
   }
 }
@@ -56,12 +56,12 @@ void printMatrix(vector<double> m1, vector<double> m2, size_t N, size_t M,
                  string mismatchColor = "\e[31m") {
   for (size_t n = 0; n < N; n++) {
     for (size_t m = 0; m < M; m++) {
-      if (m1[m * ldc + n] == m2[m * ldc + n])
+      if (m1[n * ldc + m] == m2[n * ldc + m])
         cout << matchColor;
       else
         cout << mismatchColor;
 
-      cout << m1[m * ldc + n] << "\e[0m\t";
+      cout << m1[n * ldc + m] << "\e[0m\t";
     }
     cout << "\n";
   }
@@ -79,14 +79,14 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   cout.flush();
   GPU_ERROR(cudaMalloc(&A, sizeof(double) * lda * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(double) * ldb * K));
-  GPU_ERROR(cudaMalloc(&C, sizeof(double) * ldc * M));
+  GPU_ERROR(cudaMalloc(&C, sizeof(double) * ldc * N));
 
   vector<double> hA(lda * K);
   vector<double> hB(ldb * K);
   vector<double> hB2(ldb * K);
-  vector<double> hC(ldc * M, 0);
-  vector<double> hC2(ldc * M, 0);
-  vector<double> cpuC(ldc * M, 0);
+  vector<double> hC(ldc * N, 0);
+  vector<double> hC2(ldc * N, 0);
+  vector<double> cpuC(ldc * N, 0);
 
   static int salt = 0;
   srand(time(NULL) + salt++);
@@ -99,7 +99,7 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
     hB[i] = rand() % 3 - 1;
   }
 
-  for (size_t i = 0; i < ldc * M; i++) {
+  for (size_t i = 0; i < ldc * N; i++) {
     cpuC[i] = hC[i] = hC2[i] = rand() % 3 - 1;
   }
 
@@ -108,7 +108,7 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   GPU_ERROR(
       cudaMemcpy(B, hB.data(), sizeof(double) * ldb * K, cudaMemcpyDefault));
   GPU_ERROR(
-      cudaMemcpy(C, hC.data(), sizeof(double) * ldc * M, cudaMemcpyDefault));
+      cudaMemcpy(C, hC.data(), sizeof(double) * ldc * N, cudaMemcpyDefault));
 
   size_t temp_storage_bytes = 0;
   d_temp_storage = NULL;
@@ -126,16 +126,16 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                              AOrder, BOrder, M, N, K, alpha, A, lda, B, ldb,
                              beta, C, ldc);
   GPU_ERROR(
-      cudaMemcpy(hC.data(), C, sizeof(double) * ldc * M, cudaMemcpyDefault));
+      cudaMemcpy(hC.data(), C, sizeof(double) * ldc * N, cudaMemcpyDefault));
   GPU_ERROR(
-      cudaMemcpy(C, hC2.data(), sizeof(double) * ldc * M, cudaMemcpyDefault));
+      cudaMemcpy(C, hC2.data(), sizeof(double) * ldc * N, cudaMemcpyDefault));
 
   Skyblas::dgemm<PARM, PARN>(temp_storage_bytes, d_temp_storage, blockCount,
                              AOrder, BOrder, M, N, K, alpha, A, lda, B, ldb,
                              beta, C, ldc);
 
   GPU_ERROR(
-      cudaMemcpy(hC2.data(), C, sizeof(double) * ldc * M, cudaMemcpyDefault));
+      cudaMemcpy(hC2.data(), C, sizeof(double) * ldc * N, cudaMemcpyDefault));
 
   GPU_ERROR(cudaDeviceSynchronize());
 
@@ -148,7 +148,7 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   bool passed = true;
   for (size_t n = 0; n < N; n++) {
     for (size_t m = 0; m < M; m++) {
-      if (hC[m * ldc + n] != cpuC[m * ldc + n]) {
+      if (hC[n * ldc + m] != cpuC[n * ldc + m]) {
         cout << "\e[31mMismatch\e[0m\n";
 
         printMatrix(hC, cpuC, N, M, ldc);
@@ -164,7 +164,8 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
     }
     if (!passed) break;
   }
-  if (passed) cout << "\e[32mPassed\e[0m (" << cpuC[N * M / 2] << ")\n";
+  if (passed)
+    cout << "\e[32mPassed\e[0m (" << cpuC[N / 2 * ldc + M / 2] << ")\n";
 
   GPU_ERROR(cudaFree(A));
   GPU_ERROR(cudaFree(B));
@@ -182,7 +183,7 @@ int main(int argc, char **argv) {
   for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
     size_t lda = M + rand() % (M + 2);
     size_t ldb = N + rand() % (N + 2);
-    size_t ldc = N + rand() % (N + 2);
+    size_t ldc = M + rand() % (N + 2);
     for (int t = 0; t < sampleSize; t++) {
       cout << M << "xKx" << N << "\t" << lda << "\t" << ldb << "\t" << ldc
            << "\t" << blockCount << "\t";
