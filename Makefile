@@ -24,7 +24,7 @@ perf: perf.cu genv?.cuh skyblas.cuh Makefile
 
 test: $(PREFIX)/test$M-$N-$(GENVER)
 
-$(PREFIX)/test$M-$N-$(GENVER): test.cu genv?.cuh skyblas.cuh Makefile
+$(PREFIX)/test$M-$N-$(GENVER): test.cu genv?.cuh gen_cublas.cuh skyblas.cuh Makefile
 	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
 
 
