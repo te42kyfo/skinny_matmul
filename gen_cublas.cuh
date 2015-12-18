@@ -9,20 +9,20 @@ namespace GEN_CUBLAS {
 cublasHandle_t handle;
 
 template <int M, int N>
-void matmul(size_t &temp_storage_bytes, double *d_temp_storage, double *A,
-            double *B, double *result, const size_t K, const int blockCount) {
+void matmul(size_t &temp_storage_bytes, double *d_temp_storage,
+            const size_t blockCount, const int K, const double alpha,
+            const double *A, const int lda, const double *B, const int ldb,
+            const double beta, double *C, const int ldc) {
   if (d_temp_storage == NULL && temp_storage_bytes == 0) {
     temp_storage_bytes = 8;
     cublasCreate(&handle);
     return;
   }
 
-  double alpha = 1.0;
-  double beta = 0.0;
   cublasStatus_t status = cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, M, N, K,
-                                      &alpha, A, M, B, N, &beta, result, M);
+                                      &alpha, A, lda, B, ldb, &beta, C, ldc);
 
-  if( status != CUBLAS_STATUS_SUCCESS) {
+  if (status != CUBLAS_STATUS_SUCCESS) {
     std::cout << "not success\n";
   }
 }
