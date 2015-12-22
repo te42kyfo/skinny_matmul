@@ -8,9 +8,9 @@ namespace GENV5 {
 
 template <int M, int N>
 __global__ void deviceReduce(double *blockResults, double *result, double alpha,
-                             double beta, int blockCount, int lda, int ldb,
-                             int ldc) {
-  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
+                             double beta, int blockCount, size_t lda,
+                             size_t ldb, size_t ldc) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (tidx >= M * N) return;
 
@@ -19,10 +19,10 @@ __global__ void deviceReduce(double *blockResults, double *result, double alpha,
 
   double sum = 0.0;
   for (int i = 0; i < blockCount; i++) {
-    sum += blockResults[i * M * ldc + m * ldc + n];
+    sum += blockResults[i * N * ldc + n * ldc + m];
   }
 
-  result[m * ldc + n] = result[m * ldc + n] * beta + sum * alpha;
+  result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
 template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
@@ -80,9 +80,9 @@ __global__ void blockProductKernel(const double *A, const double *B,
         blockSum += blockStorage[i];
       }
       if (TRANSPOSE) {
-        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
-      } else {
         out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
+      } else {
+        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
       }
     }
   }
@@ -94,7 +94,7 @@ void matmul(size_t &temp_storage_bytes, double *d_temp_storage,
             const double *A, const int lda, const double *B, const int ldb,
             const double beta, double *C, const int ldc) {
   if (temp_storage_bytes == 0) {
-    temp_storage_bytes = blockCount * sizeof(double) * M * ldc;
+    temp_storage_bytes = blockCount * sizeof(double) * N * ldc;
     return;
   }
 
