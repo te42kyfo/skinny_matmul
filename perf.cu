@@ -8,11 +8,9 @@
 
 #include "skyblas.cuh"
 
-
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
 #endif
-
 
 using namespace std;
 
@@ -53,18 +51,12 @@ size_t temp_storage_bytes;
 void initMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 int M, int N, int K, int lda, int ldb, int ldc,
                 size_t blockCount) {
-  if (AOrder == Skyblas::COLUMN) {
-    GPU_ERROR(cudaMalloc(&A, sizeof(double) * lda * K));
-    initKernel<<<52, 256>>>(A, lda * K);
-  } else {
-    GPU_ERROR(cudaMalloc(&A, sizeof(double) * lda * M));
-    initKernel<<<52, 256>>>(A, lda * M);
-  }
-
+  GPU_ERROR(cudaMalloc(&A, sizeof(double) * lda * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(double) * ldb * K));
-  GPU_ERROR(cudaMalloc(&C, sizeof(double) * ldc * M));
-  initKernel<<<52, 256>>>(B, N * K);
-  initKernel<<<52, 256>>>(C, M * N);
+  GPU_ERROR(cudaMalloc(&C, sizeof(double) * ldc * N));
+  initKernel<<<52, 256>>>(A, lda * K);
+  initKernel<<<52, 256>>>(B, ldb * K);
+  initKernel<<<52, 256>>>(C, ldc * N);
 
   temp_storage_bytes = 0;
   d_temp_storage = NULL;
@@ -88,12 +80,14 @@ double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                      size_t blockCount) {
   GPU_ERROR(cudaDeviceSynchronize());
 
+  double alpha = 2.0;
+  double beta = 1.0;
   int iters = 1;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
     Skyblas::dgemm<PARM, PARN>(temp_storage_bytes, d_temp_storage, blockCount,
-                               AOrder, BOrder, M, N, K, 1.0, A, M, B, N, 1.0, C,
-                               N);
+                               AOrder, BOrder, M, N, K, alpha, A, lda, B, ldb,
+                               beta, C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -114,7 +108,7 @@ int main(int argc, char** argv) {
   while (resultTime < 0.3 && K * 2 < maxK) {
     K *= 2;
     resultTime =
-        measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, N, 26);
+        measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M, 26);
   }
 
   double bestTime = 0;
@@ -124,7 +118,7 @@ int main(int argc, char** argv) {
     int sampleSize = 1;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
-      times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, N,
+      times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M,
                                blockCount);
     }
 
