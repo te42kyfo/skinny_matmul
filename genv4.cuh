@@ -19,10 +19,10 @@ __global__ void deviceReduce(double *blockResults, double *result, double alpha,
 
   double sum = 0.0;
   for (int i = 0; i < blockCount; i++) {
-    sum += blockResults[i * M * ldc + m * ldc + n];
+    sum += blockResults[i * N * ldc + n * ldc + m];
   }
 
-  result[m * ldc + n] = result[m * ldc + n] * beta + sum * alpha;
+  result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
 template <int M, int N, int BLOCKSIZE, bool TRANSPOSE>
@@ -58,9 +58,9 @@ __global__ void blockProductKernel(const double *A, const double *B,
       blockSum += blockStorage[i];
     }
     if (TRANSPOSE) {
-      out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
-    } else {
       out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
+    } else {
+      out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
     }
   }
 }
