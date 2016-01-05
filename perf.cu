@@ -77,12 +77,11 @@ void deInitMatmul() {
 
 double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                      size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
-                     size_t blockCount) {
+                     size_t blockCount, int iters = 1) {
   GPU_ERROR(cudaDeviceSynchronize());
 
   double alpha = 2.0;
   double beta = 1.0;
-  int iters = 1;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
     Skyblas::dgemm<PARM, PARN>(temp_storage_bytes, d_temp_storage, blockCount,
@@ -110,21 +109,23 @@ int main(int argc, char** argv) {
   initMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, maxK, M + 32, N, N, 8 * 13);
 
   double resultTime = 0;
-  while (resultTime < 0.3 && K * 2 < maxK) {
+  while (resultTime < 0.2 && K * 2 < maxK) {
     K *= 2;
     resultTime =
         measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M, 26);
   }
 
+  int iters = 0.2 / resultTime;
+
   for (size_t lda = M; lda <= M + 32; lda++) {
     double bestTime = 0;
     int bestBlockCount = 0;
     for (int blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
-      int sampleSize = 1;
+      int sampleSize = 3;
       vector<double> times(sampleSize);
       for (int t = 0; t < sampleSize; t++) {
         times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, N,
-                                 M, blockCount);
+                                 M, blockCount, iters);
       }
 
       sort(times.begin(), times.end());
