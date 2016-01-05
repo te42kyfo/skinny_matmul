@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
         measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M, 26);
   }
 
-  int iters = 0.2 / resultTime;
+  int iters = max(1, (int) (0.01 / resultTime));
 
   for (size_t lda = M; lda <= M + 32; lda++) {
     double bestTime = 0;
