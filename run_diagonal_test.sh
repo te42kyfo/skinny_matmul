@@ -2,6 +2,10 @@
 
 range=32
 
+if [ -z $1 ]; then
+    echo "Specify Kernel Version"
+    exit
+fi
 
 for (( d=1 ; d<$range; d++ ))
 do

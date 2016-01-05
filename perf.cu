@@ -99,10 +99,15 @@ int main(int argc, char** argv) {
   size_t N = PARN;
   size_t M = PARM;
 
-  size_t maxK = 1 * ((size_t)1 << 30) / ((M + N) * 8);
-  size_t K = 0.2 * ((size_t)1 << 30) / ((M + N) * 8);
+  if (M == 0 || N == 0) {
+    std::cout << "M\tN\tK  \t lda \t blockcount \t time   \t  perf\n";
+    return 0;
+  }
 
-  initMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, maxK, M, N, N, 8 * 13);
+  size_t maxK = 2 * ((size_t)1 << 30) / ((M + 32 + N) * 8);
+  size_t K = 0.2 * ((size_t)1 << 30) / ((M + 32 + N) * 8);
+
+  initMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, maxK, M + 32, N, N, 8 * 13);
 
   double resultTime = 0;
   while (resultTime < 0.3 && K * 2 < maxK) {
@@ -111,27 +116,29 @@ int main(int argc, char** argv) {
         measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M, 26);
   }
 
-  double bestTime = 0;
-  int bestBlockCount = 0;
+  for (size_t lda = M; lda <= M + 32; lda++) {
+    double bestTime = 0;
+    int bestBlockCount = 0;
+    for (int blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
+      int sampleSize = 1;
+      vector<double> times(sampleSize);
+      for (int t = 0; t < sampleSize; t++) {
+        times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, N,
+                                 M, blockCount);
+      }
 
-  for (int blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
-    int sampleSize = 1;
-    vector<double> times(sampleSize);
-    for (int t = 0; t < sampleSize; t++) {
-      times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M,
-                               blockCount);
+      sort(times.begin(), times.end());
+
+      if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
+        bestTime = times[sampleSize / 2];
+        bestBlockCount = blockCount;
+      }
     }
 
-    sort(times.begin(), times.end());
-
-    if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
-      bestTime = times[sampleSize / 2];
-      bestBlockCount = blockCount;
-    }
+    cout << M << "\t" << N << "\t" << K << "\t" << lda << "\t" << bestBlockCount
+         << "\t" << setprecision(3) << "\t" << bestTime << "\t"
+         << M * N * K * 2 / bestTime * 1e-9 << "\n";
+    cout.flush();
   }
-  cout << M << " " << N << " " << K << "\t" << bestBlockCount << "\t"
-       << setprecision(3) << "\t" << bestTime << "\t"
-       << M * N * K * 2 / bestTime * 1e-9 << "\n";
-  cout.flush();
   deInitMatmul();
 }

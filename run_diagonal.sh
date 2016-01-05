@@ -21,6 +21,8 @@ echo "all done"
 
 rm diag_$2_$3.txt
 
+echo "#" + $(nvcc
+
 for d in {1..100}
 do
     ./build/perf$d-$d-$3 | tee --append ./diag_$2_$3.txt

@@ -51,4 +51,14 @@ void dgemm(size_t &temp_storage_bytes, double *d_temp_storage,
               << ", input is " << M << "xNx" << N << "\n";
   }
 }
+
+template <>
+void dgemm<0, 0>(size_t &temp_storage_bytes, double *d_temp_storage,
+                 const size_t blockCount, const MEMORY_ORDER AOrder,
+                 const MEMORY_ORDER BOrder, const int M, const int N,
+                 const int K, const double alpha, const double *A,
+                 const int lda, const double *B, const int ldb,
+                 const double beta, double *C, const int ldc) {
+  std::cout << "Can't instance with zero matrix dimensions\n";
+}
 }

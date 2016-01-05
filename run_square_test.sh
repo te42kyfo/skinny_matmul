@@ -3,6 +3,11 @@
 xrange=64
 yrange=64
 
+if [ -z $1 ]; then
+    echo "Specify Kernel Version"
+    exit
+fi
+
 for (( x=1 ; x<$xrange; x+=1 ))
 do
     for (( y=1 ; y<$yrange; y+=1 ))
