@@ -1,7 +1,5 @@
 #!/bin/sh
 
-
-
 if [ -z $1 ] || [ -z $2 ]; then
     echo "Usage: $0 <Kernel Version> <drange>"
     exit
