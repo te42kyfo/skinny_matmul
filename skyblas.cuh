@@ -24,17 +24,17 @@ namespace Skyblas {
 
 enum MEMORY_ORDER { ROW, COLUMN };
 
-template <size_t TM, size_t TN>
-void dgemm(size_t &temp_storage_bytes, double *d_temp_storage,
+template <typename T, size_t TM, size_t TN>
+void dgemm(size_t &temp_storage_bytes, T *d_temp_storage,
            const size_t blockCount, const MEMORY_ORDER AOrder,
            const MEMORY_ORDER BOrder, const int M, const int N, const int K,
-           const double alpha, const double *A, const int lda, const double *B,
-           const int ldb, const double beta, double *C, const int ldc) {
+           const T alpha, const T *A, const int lda, const T *B, const int ldb,
+           const T beta, T *C, const int ldc) {
   if (TM == M && TN == N) {
     if (AOrder == Skyblas::COLUMN && BOrder == Skyblas::ROW) {
-      SKYBLAS_GENVER::matmul<TM, TN>(temp_storage_bytes, d_temp_storage,
-                                     blockCount, K, alpha, A, lda, B, ldb, beta,
-                                     C, ldc);
+      SKYBLAS_GENVER::matmul<T, TM, TN>(temp_storage_bytes, d_temp_storage,
+                                        blockCount, K, alpha, A, lda, B, ldb,
+                                        beta, C, ldc);
     } else {
       std::cout << "Wrong memory Ordering\n";
       return;
@@ -53,12 +53,21 @@ void dgemm(size_t &temp_storage_bytes, double *d_temp_storage,
 }
 
 template <>
-void dgemm<0, 0>(size_t &temp_storage_bytes, double *d_temp_storage,
-                 const size_t blockCount, const MEMORY_ORDER AOrder,
-                 const MEMORY_ORDER BOrder, const int M, const int N,
-                 const int K, const double alpha, const double *A,
-                 const int lda, const double *B, const int ldb,
-                 const double beta, double *C, const int ldc) {
+void dgemm<float, 0, 0>(size_t &temp_storage_bytes, float *d_temp_storage,
+                        const size_t blockCount, const MEMORY_ORDER AOrder,
+                        const MEMORY_ORDER BOrder, const int M, const int N,
+                        const int K, const float alpha, const float *A,
+                        const int lda, const float *B, const int ldb,
+                        const float beta, float *C, const int ldc) {
+  std::cout << "Can't instance with zero matrix dimensions\n";
+}
+template <>
+void dgemm<double, 0, 0>(size_t &temp_storage_bytes, double *d_temp_storage,
+                         const size_t blockCount, const MEMORY_ORDER AOrder,
+                         const MEMORY_ORDER BOrder, const int M, const int N,
+                         const int K, const double alpha, const double *A,
+                         const int lda, const double *B, const int ldb,
+                         const double beta, double *C, const int ldc) {
   std::cout << "Can't instance with zero matrix dimensions\n";
 }
 }

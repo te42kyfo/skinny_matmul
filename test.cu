@@ -15,6 +15,8 @@
 
 using namespace std;
 
+typedef float real;
+
 double dtime() {
   double tseconds = 0;
   struct timeval t;
@@ -36,13 +38,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 
 void cpuDgemm(const Skyblas::MEMORY_ORDER AOrder,
               const Skyblas::MEMORY_ORDER BOrder, const size_t M,
-              const size_t N, const size_t K, const double alpha,
-              const double *A, const int lda, const double *B, const int ldb,
-              const double beta, double *C, const int ldc) {
+              const size_t N, const size_t K, const real alpha, const real *A,
+              const int lda, const real *B, const int ldb, const real beta,
+              real *C, const int ldc) {
 #pragma omp parallel for
   for (size_t m = 0; m < M; m++) {
     for (size_t n = 0; n < N; n++) {
-      double sum = 0;
+      real sum = 0;
       for (size_t k = 0; k < K; k++) {
         sum += A[k * lda + m] * B[k * ldb + n];
       }
@@ -51,7 +53,7 @@ void cpuDgemm(const Skyblas::MEMORY_ORDER AOrder,
   }
 }
 
-void printMatrix(vector<double> m1, vector<double> m2, size_t N, size_t M,
+void printMatrix(vector<real> m1, vector<real> m2, size_t N, size_t M,
                  size_t ldc, string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
   for (size_t n = 0; n < N; n++) {
@@ -70,23 +72,23 @@ void printMatrix(vector<double> m1, vector<double> m2, size_t N, size_t M,
 void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                 size_t blockCount) {
-  double *A, *B, *d_temp_storage, *C;
+  real *A, *B, *d_temp_storage, *C;
 
-  double alpha = 1.0;
-  double beta = 2.0;
+  real alpha = 1.0;
+  real beta = 2.0;
 
   cout << "Setup, ";
   cout.flush();
-  GPU_ERROR(cudaMalloc(&A, sizeof(double) * lda * K));
-  GPU_ERROR(cudaMalloc(&B, sizeof(double) * ldb * K));
-  GPU_ERROR(cudaMalloc(&C, sizeof(double) * ldc * N));
+  GPU_ERROR(cudaMalloc(&A, sizeof(real) * lda * K));
+  GPU_ERROR(cudaMalloc(&B, sizeof(real) * ldb * K));
+  GPU_ERROR(cudaMalloc(&C, sizeof(real) * ldc * N));
 
-  vector<double> hA(lda * K);
-  vector<double> hB(ldb * K);
-  vector<double> hB2(ldb * K);
-  vector<double> hC(ldc * N, 0);
-  vector<double> hC2(ldc * N, 0);
-  vector<double> cpuC(ldc * N, 0);
+  vector<real> hA(lda * K);
+  vector<real> hB(ldb * K);
+  vector<real> hB2(ldb * K);
+  vector<real> hC(ldc * N, 0);
+  vector<real> hC2(ldc * N, 0);
+  vector<real> cpuC(ldc * N, 0);
 
   static int salt = 0;
   srand(time(NULL) + salt++);
@@ -104,38 +106,38 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   }
 
   GPU_ERROR(
-      cudaMemcpy(A, hA.data(), sizeof(double) * lda * K, cudaMemcpyDefault));
+      cudaMemcpy(A, hA.data(), sizeof(real) * lda * K, cudaMemcpyDefault));
   GPU_ERROR(
-      cudaMemcpy(B, hB.data(), sizeof(double) * ldb * K, cudaMemcpyDefault));
+      cudaMemcpy(B, hB.data(), sizeof(real) * ldb * K, cudaMemcpyDefault));
   GPU_ERROR(
-      cudaMemcpy(C, hC.data(), sizeof(double) * ldc * N, cudaMemcpyDefault));
+      cudaMemcpy(C, hC.data(), sizeof(real) * ldc * N, cudaMemcpyDefault));
 
   size_t temp_storage_bytes = 0;
   d_temp_storage = NULL;
 
-  Skyblas::dgemm<PARM, PARN>(temp_storage_bytes, d_temp_storage, blockCount,
-                             AOrder, BOrder, M, N, K, alpha, A, lda, B, ldb,
-                             beta, C, ldc);
+  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                   blockCount, AOrder, BOrder, M, N, K, alpha,
+                                   A, lda, B, ldb, beta, C, ldc);
 
-  GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(double) * temp_storage_bytes));
+  GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(real) * temp_storage_bytes));
 
   cout << "GPU, ";
   cout.flush();
 
-  Skyblas::dgemm<PARM, PARN>(temp_storage_bytes, d_temp_storage, blockCount,
-                             AOrder, BOrder, M, N, K, alpha, A, lda, B, ldb,
-                             beta, C, ldc);
+  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                   blockCount, AOrder, BOrder, M, N, K, alpha,
+                                   A, lda, B, ldb, beta, C, ldc);
   GPU_ERROR(
-      cudaMemcpy(hC.data(), C, sizeof(double) * ldc * N, cudaMemcpyDefault));
+      cudaMemcpy(hC.data(), C, sizeof(real) * ldc * N, cudaMemcpyDefault));
   GPU_ERROR(
-      cudaMemcpy(C, hC2.data(), sizeof(double) * ldc * N, cudaMemcpyDefault));
+      cudaMemcpy(C, hC2.data(), sizeof(real) * ldc * N, cudaMemcpyDefault));
 
-  Skyblas::dgemm<PARM, PARN>(temp_storage_bytes, d_temp_storage, blockCount,
-                             AOrder, BOrder, M, N, K, alpha, A, lda, B, ldb,
-                             beta, C, ldc);
+  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                   blockCount, AOrder, BOrder, M, N, K, alpha,
+                                   A, lda, B, ldb, beta, C, ldc);
 
   GPU_ERROR(
-      cudaMemcpy(hC2.data(), C, sizeof(double) * ldc * N, cudaMemcpyDefault));
+      cudaMemcpy(hC2.data(), C, sizeof(real) * ldc * N, cudaMemcpyDefault));
 
   GPU_ERROR(cudaDeviceSynchronize());
 
