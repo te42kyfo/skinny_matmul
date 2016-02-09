@@ -84,7 +84,7 @@ double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 
   real alpha = 2.0;
   real beta = 1.0;
-  real t1 = dtime();
+  double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
     Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
                                      blockCount, AOrder, BOrder, M, N, K, alpha,
