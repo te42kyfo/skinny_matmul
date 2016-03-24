@@ -19,6 +19,12 @@
 #if SKYBLAS_GENVER == GEN_CUBLAS
 #include "gen_cublas.cuh"
 #endif
+#if SKYBLAS_GENVER == GENV3_INST
+#include "genv3_inst.cuh"
+#endif
+#if SKYBLAS_GENVER == SPEC8X8
+#include "spec8x8.cuh"
+#endif
 
 namespace Skyblas {
 
