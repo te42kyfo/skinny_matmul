@@ -5,6 +5,22 @@
 
 namespace SPEC8X8 {
 
+template <typename T>
+__device__ inline T t_shfl(T var, unsigned int srcLane, int width);
+
+template <>
+__device__ inline float t_shfl<float>(float var, unsigned int srcLane, int width) {
+  return __shfl(var, srcLane, width);
+}
+
+template <>
+__device__ inline double t_shfl<double>(double var, unsigned int srcLane, int width) {
+  int2 a = *reinterpret_cast<int2 *>(&var);
+  a.x = __shfl(a.x, srcLane, width);
+  a.y = __shfl(a.y, srcLane, width);
+  return *reinterpret_cast<double *>(&a);
+}
+
 template <typename T, int M, int N>
 __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
                              int blockCount, size_t lda, size_t ldb,
@@ -25,9 +41,9 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
 }
 
 template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
-__launch_bounds__(BLOCKSIZE, 8)
-__global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
-                                   const int lda, const int ldb, const int ldc) {
+__launch_bounds__(BLOCKSIZE, 8) __global__
+    void blockProductKernel(const T *A, const T *B, T *out, const int K,
+                            const int lda, const int ldb, const int ldc) {
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ T blockStorage[BLOCKSIZE];
@@ -41,13 +57,11 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
     threadSum[n] = 0;
   }
 
-  //try warp broadcast
   for (int idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     T av = A[idx * lda + m];
-    blockStorage[threadIdx.x] = B[idx*ldb+m];
-    int localAddress = threadIdx.x-m;
+    T bv = B[idx * ldb + m];
     for (int n = 0; n < N; n++) {
-      threadSum[n] +=  av * blockStorage[localAddress+n];
+      threadSum[n] += av * t_shfl(bv, n, 8);
     }
   }
 
