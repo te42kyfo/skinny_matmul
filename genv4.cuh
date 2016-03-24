@@ -2,7 +2,6 @@
 
 #include "cub.cuh"
 #include <cuda_runtime.h>
-#include <iostream>
 
 namespace GENV4 {
 
@@ -39,8 +38,7 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
 
   if (blockDim.x * gridDim.x / M / N == tidx / M / N) return;
 
-  T threadSum;
-  threadSum = 0;
+  T threadSum = 0;
 
   for (size_t idx = tidx / M / N; idx < K;
        idx += blockDim.x * gridDim.x / M / N) {
@@ -56,11 +54,8 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
     for (int i = threadIdx.x; i < BLOCKSIZE; i += M * N) {
       blockSum += blockStorage[i];
     }
-    if (TRANSPOSE) {
-      out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
-    } else {
-      out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
-    }
+
+    out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
   }
 }
 
@@ -73,18 +68,13 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage, size_t blockCount,
   }
 
   if (temp_storage_bytes == 0) {
-    temp_storage_bytes = blockCount * sizeof(T) * M * ldc;
+    temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
     return;
   }
   cudaMemset(d_temp_storage, 0, temp_storage_bytes);
 
-  if (N > M) {
-    GENV4::blockProductKernel<T, N, M, 256, true><<<blockCount, 256>>>(
-        B, A, d_temp_storage, K, ldb, lda, ldc);
-  } else {
-    GENV4::blockProductKernel<T, M, N, 256, false><<<blockCount, 256>>>(
-        A, B, d_temp_storage, K, lda, ldb, ldc);
-  }
+  GENV4::blockProductKernel<T, M, N, 256, false><<<blockCount, 256>>>(
+      A, B, d_temp_storage, K, lda, ldb, ldc);
 
   GENV4::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
       d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
