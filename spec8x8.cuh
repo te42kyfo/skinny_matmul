@@ -5,6 +5,19 @@
 
 namespace SPEC8X8 {
 
+template <typename T>
+struct Vec2;
+
+template <>
+struct Vec2<float> {
+  typedef float2 Type;
+};
+
+template <>
+struct Vec2<double> {
+  typedef double2 Type;
+};
+
 template <typename T, int M, int N>
 __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
                              int blockCount, size_t lda, size_t ldb,
@@ -25,14 +38,15 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
 }
 
 template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
-__launch_bounds__(BLOCKSIZE, 8)
-__global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
-                                   const int lda, const int ldb, const int ldc) {
+__launch_bounds__(BLOCKSIZE, 8) __global__
+    void blockProductKernel(const T *A, const T *B, T *out, const int K,
+                            const int lda, const int ldb, const int ldc) {
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ T blockStorage[BLOCKSIZE];
 
   blockStorage[threadIdx.x] = 0.0;
+  float4 *vecBlockStorage = (float4 *)blockStorage;
 
   int m = tidx % M;
 
@@ -41,13 +55,17 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
     threadSum[n] = 0;
   }
 
-  //try warp broadcast
+  // try warp broadcast
   for (int idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     T av = A[idx * lda + m];
-    blockStorage[threadIdx.x] = B[idx*ldb+m];
-    int localAddress = threadIdx.x-m;
-    for (int n = 0; n < N; n++) {
-      threadSum[n] +=  av * blockStorage[localAddress+n];
+    blockStorage[threadIdx.x] = B[idx * ldb + m];
+    int localAddress = (threadIdx.x - m) / 4;
+    for (int n = 0; n < N / 4; n++) {
+      float4 bv = vecBlockStorage[localAddress + n];
+      threadSum[n * 4 + 0] += av * bv.x;
+      threadSum[n * 4 + 1] += av * bv.y;
+      threadSum[n * 4 + 2] += av * bv.z;
+      threadSum[n * 4 + 3] += av * bv.w;
     }
   }
 
@@ -83,6 +101,10 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
     std::cout << "This kernel ist supossed to be specialized with M,N=8\n";
     return;
   }
+  cudaFuncSetSharedMemConfig(blockProductKernel<T, N, M, 256, true>,
+                             cudaSharedMemBankSizeEightByte);
+  cudaFuncSetSharedMemConfig(blockProductKernel<T, M, N, 256, false>,
+                             cudaSharedMemBankSizeEightByte);
 
   if (N > M) {
     SPEC8X8::blockProductKernel<T, N, M, 256, true><<<blockCount, 256>>>(
