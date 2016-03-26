@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
-namespace SPEC8X8 {
+namespace SPECSYM {
 
 template <typename T, int M, int N>
 __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
@@ -25,28 +25,36 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
 }
 
 template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
-__launch_bounds__(BLOCKSIZE, 8)
-__global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
-                                   const int lda, const int ldb, const int ldc) {
+__launch_bounds__(BLOCKSIZE,
+                  N <= 8 ? 8 : (1 << 16) / BLOCKSIZE / M / 4 - 1) __global__
+    void blockProductKernel(const T *A, const T *B, T *out, const int K,
+                            const int lda, const int ldb, const int ldc) {
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  int warpLane = threadIdx.x % 32;
+  int rowsPerWarp = 32 / M;
+  int m = warpLane % M;
+
+  if (warpLane >= rowsPerWarp * M) {
+    warpLane = rowsPerWarp * M - 1;
+    m = warpLane % M;
+  }
 
   __shared__ T blockStorage[BLOCKSIZE];
 
   blockStorage[threadIdx.x] = 0.0;
-
-  int m = tidx % M;
 
   T threadSum[N];
   for (int n = 0; n < N; n++) {
     threadSum[n] = 0;
   }
 
-  for (int idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
+  for (int idx = (tidx / 32) * rowsPerWarp + warpLane / M; idx < K;
+       idx += blockDim.x * gridDim.x / 32 * rowsPerWarp) {
     T av = A[idx * lda + m];
-    blockStorage[threadIdx.x] = B[idx*ldb+m];
-    int localAddress = threadIdx.x-m;
+    blockStorage[threadIdx.x] = B[idx * ldb + m];
+    int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
-      threadSum[n] +=  av * blockStorage[localAddress+n];
+      threadSum[n] += av * blockStorage[localAddress + n];
     }
   }
 
@@ -57,8 +65,10 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
 
     if (threadIdx.x < M) {
       T blockSum = 0.0;
-      for (int i = threadIdx.x; i < BLOCKSIZE; i += M) {
-        blockSum += blockStorage[i];
+      for (int w = 0; w < BLOCKSIZE / 32; w++) {
+        for (int wp = threadIdx.x; wp < rowsPerWarp * M; wp += M) {
+          blockSum += blockStorage[w * 32 + wp];
+        }
       }
       if (TRANSPOSE) {
         out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
@@ -78,19 +88,22 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
     temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
     return;
   }
-  if (M != 8 && N != 8) {
-    std::cout << "This kernel ist supossed to be specialized with M,N=8\n";
+  if (M != N) {
+    std::cout << "This kernel works only for symmetric dimensions\n";
     return;
   }
 
+  int const blocksize = 256;
   if (N > M) {
-    SPEC8X8::blockProductKernel<T, N, M, 256, true><<<blockCount, 256>>>(
+    SPECSYM::blockProductKernel<T, N, M, blocksize,
+                                  true><<<blockCount, blocksize>>>(
         B, A, d_temp_storage, K, ldb, lda, ldc);
   } else {
-    SPEC8X8::blockProductKernel<T, M, N, 256, false><<<blockCount, 256>>>(
+    SPECSYM::blockProductKernel<T, M, N, blocksize,
+                                  false><<<blockCount, blocksize>>>(
         A, B, d_temp_storage, K, lda, ldb, ldc);
   }
-  SPEC8X8::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
+  SPECSYM::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
       d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
 }
 }

@@ -25,6 +25,9 @@
 #if SKYBLAS_GENVER == SPEC8X8
 #include "spec8x8.cuh"
 #endif
+#if SKYBLAS_GENVER == SPECSYM
+#include "specsym.cuh"
+#endif
 
 namespace Skyblas {
 
