@@ -14,7 +14,7 @@
 
 using namespace std;
 
-typedef float real;
+typedef double real;
 
 double dtime() {
   double tseconds = 0;
@@ -105,19 +105,22 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  size_t maxK = 2 * ((size_t)1 << 30) / ((M + 32 + N) * 8);
-  size_t K = 0.2 * ((size_t)1 << 30) / ((M + 32 + N) * 8);
+  size_t maxK = 2 * ((size_t)1 << 30) / ((M + N) * 8);
+  size_t K = 0.2 * ((size_t)1 << 30) / ((M + N) * 8);
 
-  initMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, maxK, M + 32, N, N, 8 * 13);
+  initMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, maxK, M, N, N, 8 * 13);
 
   double resultTime = 0;
-  while (resultTime < 0.2 && K * 2 < maxK) {
+  while (resultTime < 0.1 && K * 2 <= maxK) {
     K *= 2;
     resultTime =
         measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M, 26);
   }
 
-  int iters = max(1, (int)(0.01 / resultTime));
+
+
+  int iters = max(1, (int)(0.05 / resultTime));
+
 
   size_t lda = M;
   double bestTime = 0;
@@ -129,7 +132,6 @@ int main(int argc, char** argv) {
       times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, N,
                                M, blockCount, iters);
     }
-
     sort(times.begin(), times.end());
 
     if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
@@ -137,6 +139,7 @@ int main(int argc, char** argv) {
       bestBlockCount = blockCount;
     }
   }
+
   cout << setw(3) << M << " " << setw(3) << N << " " << setw(9) << K << " "
        << setw(3) << lda << " " << setw(10) << bestBlockCount << " "
        << setprecision(3) << setw(8) << bestTime << " " << setw(5)
