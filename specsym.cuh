@@ -26,7 +26,7 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
 
 template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
 __launch_bounds__(BLOCKSIZE,
-                  N <= 8 ? 8 : (1 << 16) / BLOCKSIZE / M / 4 - 1) __global__
+                  N <= 8 ? 8 : (1 << 16) / BLOCKSIZE / N / 4 - 1) __global__
     void blockProductKernel(const T *A, const T *B, T *out, const int K,
                             const int lda, const int ldb, const int ldc) {
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -86,10 +86,6 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
             const int ldc) {
   if (temp_storage_bytes == 0) {
     temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
-    return;
-  }
-  if (M != N) {
-    std::cout << "This kernel works only for symmetric dimensions\n";
     return;
   }
 
