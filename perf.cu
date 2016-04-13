@@ -14,7 +14,7 @@
 
 using namespace std;
 
-typedef double real;
+typedef float real;
 
 double dtime() {
   double tseconds = 0;
