@@ -6,6 +6,7 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include <omp.h>
+#include <random>
 
 #include "skyblas.cuh"
 
@@ -69,7 +70,7 @@ void printMatrix(vector<real> m1, vector<real> m2, size_t N, size_t M,
   }
 }
 
-void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
+bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                 size_t blockCount) {
   real *A, *B, *d_temp_storage, *C;
@@ -77,7 +78,6 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   real alpha = 1.0;
   real beta = 2.0;
 
-  cout << "Setup, ";
   cout.flush();
   GPU_ERROR(cudaMalloc(&A, sizeof(real) * lda * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(real) * ldb * K));
@@ -90,21 +90,24 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   vector<real> hC2(ldc * N, 0);
   vector<real> cpuC(ldc * N, 0);
 
-  static int salt = 0;
-  srand(time(NULL) + salt++);
-
-  for (size_t i = 0; i < lda * K; i++) {
-    hA[i] = rand() % 3 - 1;
+#pragma omp parallel
+  {
+    random_device r;
+    default_random_engine gen(r());
+    uniform_int_distribution<int> dis(-2, 2);
+#pragma omp for
+    for (size_t i = 0; i < lda * K; i++) {
+      hA[i] = dis(gen);
+    }
+#pragma omp for
+    for (size_t i = 0; i < ldb * K; i++) {
+      hB[i] = dis(gen);
+    }
+#pragma omp for
+    for (size_t i = 0; i < ldc * N; i++) {
+      hC2[i] = hC[i] = cpuC[i] = dis(gen);
+    }
   }
-
-  for (size_t i = 0; i < ldb * K; i++) {
-    hB[i] = rand() % 3 - 1;
-  }
-
-  for (size_t i = 0; i < ldc * N; i++) {
-    cpuC[i] = hC[i] = hC2[i] = rand() % 3 - 1;
-  }
-
   GPU_ERROR(
       cudaMemcpy(A, hA.data(), sizeof(real) * lda * K, cudaMemcpyDefault));
   GPU_ERROR(
@@ -120,9 +123,6 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                                    A, lda, B, ldb, beta, C, ldc);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(real) * temp_storage_bytes));
-
-  cout << "GPU, ";
-  cout.flush();
 
   Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
                                    blockCount, AOrder, BOrder, M, N, K, alpha,
@@ -140,9 +140,6 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
       cudaMemcpy(hC2.data(), C, sizeof(real) * ldc * N, cudaMemcpyDefault));
 
   GPU_ERROR(cudaDeviceSynchronize());
-
-  cout << "CPU, ";
-  cout.flush();
 
   cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hB.data(), ldb, beta,
            cpuC.data(), ldc);
@@ -166,32 +163,33 @@ void testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
     }
     if (!passed) break;
   }
-  if (passed)
-    cout << "\e[32mPassed\e[0m (" << cpuC[N / 2 * ldc + M / 2] << ")\n";
 
   GPU_ERROR(cudaFree(A));
   GPU_ERROR(cudaFree(B));
   GPU_ERROR(cudaFree(d_temp_storage));
   GPU_ERROR(cudaFree(C));
+
+  return passed;
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 1;
+  int sampleSize = 10;
 
   size_t M = PARM;
   size_t N = PARN;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.01;
 
-  for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
-    size_t lda = M + rand() % (M + 2);
-    size_t ldb = N + rand() % (N + 2);
-    size_t ldc = M + rand() % (N + 2);
+  for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 1 * 13) {
+    cout << M << "xKx" << N << "\t" << blockCount << "\t";
+    bool passed = true;
     for (int t = 0; t < sampleSize; t++) {
-      cout << M << "xKx" << N << "\t" << lda << "\t" << ldb << "\t" << ldc
-           << "\t" << blockCount << "\t";
-      testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb, ldc,
-                 blockCount);
+      size_t lda = M + rand() % (M + 2);
+      size_t ldb = N + rand() % (N + 2);
+      size_t ldc = M + rand() % (N + 2);
+      passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
+                           ldc, blockCount);
     }
+    if (passed) cout << "\e[32m Passed \e[0m\n";
   }
 
   cout.flush();
