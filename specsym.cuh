@@ -51,7 +51,9 @@ __launch_bounds__(BLOCKSIZE,
   for (int idx = (tidx / 32) * rowsPerWarp + warpLane / M; idx < K;
        idx += blockDim.x * gridDim.x / 32 * rowsPerWarp) {
     T av = A[idx * lda + m];
-    blockStorage[threadIdx.x] = B[idx * ldb + m];
+    if(m < N) {
+      blockStorage[threadIdx.x] = B[idx * ldb + m];
+    }
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
       threadSum[n] += av * blockStorage[localAddress + n];
@@ -88,15 +90,19 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
     temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
     return;
   }
+  if (M > 32 || N > 32) {
+    std::cerr << "This Kernel can't be used for M,N > 32\n";
+    return;
+  }
 
   int const blocksize = 256;
   if (N > M) {
     SPECSYM::blockProductKernel<T, N, M, blocksize,
-                                  true><<<blockCount, blocksize>>>(
+                                true><<<blockCount, blocksize>>>(
         B, A, d_temp_storage, K, ldb, lda, ldc);
   } else {
     SPECSYM::blockProductKernel<T, M, N, blocksize,
-                                  false><<<blockCount, blocksize>>>(
+                                false><<<blockCount, blocksize>>>(
         A, B, d_temp_storage, K, lda, ldb, ldc);
   }
   SPECSYM::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
