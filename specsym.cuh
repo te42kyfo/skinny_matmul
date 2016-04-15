@@ -32,12 +32,14 @@ __launch_bounds__(BLOCKSIZE,
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   int warpLane = threadIdx.x % 32;
   int rowsPerWarp = 32 / M;
-  int m = warpLane % M;
 
   if (warpLane >= rowsPerWarp * M) {
     warpLane = rowsPerWarp * M - 1;
-    m = warpLane % M;
   }
+
+  int m = warpLane % M;
+  int rowCacheIdx = m;
+  if (m >= N) rowCacheIdx = N-1;
 
   __shared__ T blockStorage[BLOCKSIZE];
 
@@ -51,9 +53,8 @@ __launch_bounds__(BLOCKSIZE,
   for (int idx = (tidx / 32) * rowsPerWarp + warpLane / M; idx < K;
        idx += blockDim.x * gridDim.x / 32 * rowsPerWarp) {
     T av = A[idx * lda + m];
-    if(m < N) {
-      blockStorage[threadIdx.x] = B[idx * ldb + m];
-    }
+    blockStorage[threadIdx.x] = B[idx * ldb + rowCacheIdx];
+
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
       threadSum[n] += av * blockStorage[localAddress + n];
