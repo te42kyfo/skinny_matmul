@@ -15,5 +15,5 @@ mkdir build
 
 rm square_$2_$3.txt
 
-./run_square_perf.sh $3 4 4 | tee --append square_$2_$3.txt
+./run_square_perf.sh $3 32 32 | tee --append square_$2_$3.txt
 

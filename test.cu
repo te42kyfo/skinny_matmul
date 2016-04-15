@@ -173,24 +173,23 @@ bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 10;
+  int sampleSize = 20;
 
   size_t M = PARM;
   size_t N = PARN;
-  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.01;
+  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.1;
 
+  cout << M << "xKx" << N << "\t";
+  bool passed = true;
   for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 1 * 13) {
-    cout << M << "xKx" << N << "\t" << blockCount << "\t";
-    bool passed = true;
     for (int t = 0; t < sampleSize; t++) {
-      size_t lda = M + rand() % (M + 2);
-      size_t ldb = N + rand() % (N + 2);
-      size_t ldc = M + rand() % (N + 2);
+      size_t lda = M + rand() % 4;
+      size_t ldb = N + rand() % 4;
+      size_t ldc = M + rand() % 4;
       passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
                            ldc, blockCount);
     }
-    if (passed) cout << "\e[32m Passed \e[0m\n";
   }
-
+  if (passed) cout << "\e[32m Passed \e[0m\n";
   cout.flush();
 }

@@ -15,6 +15,6 @@ mkdir build
 
 rm diag_$2_$3.txt
 
-./run_diagonal_perf.sh $3 100 | tee --append diag_$2_$3.txt
+./run_diagonal_perf.sh $3 32 | tee --append diag_$2_$3.txt
 
 
