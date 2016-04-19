@@ -24,7 +24,7 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
   result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
-template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
+template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE, bool SELF>
 __launch_bounds__(BLOCKSIZE,
                   N <= 8 ? 8 : (1 << 16) / BLOCKSIZE / N / 4 - 1) __global__
     void blockProductKernel(const T *A, const T *B, T *out, const int K,
@@ -51,7 +51,11 @@ __launch_bounds__(BLOCKSIZE,
   for (int idx = (tidx / 32) * rowsPerWarp + warpLane / M; idx < K;
        idx += blockDim.x * gridDim.x / 32 * rowsPerWarp) {
     T av = A[idx * lda + m];
-    blockStorage[threadIdx.x] = B[idx * ldb + m];
+    if (!SELF) {
+      blockStorage[threadIdx.x] = B[idx * ldb + m];
+    } else {
+      blockStorage[threadIdx.x] = av;
+    }
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
       threadSum[n] += av * blockStorage[localAddress + n];
@@ -89,15 +93,32 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
     return;
   }
 
+  if (M > 32 || N > 32) {
+    std::cerr << "This Kernel cannot be instanciated for M,N > 32\n";
+    return;
+  }
+
   int const blocksize = 256;
   if (N > M) {
-    SPECSYM::blockProductKernel<T, N, M, blocksize,
+    if (A == B) {
+      SPECSYM::blockProductKernel<T, N, M, blocksize, true,
                                   true><<<blockCount, blocksize>>>(
-        B, A, d_temp_storage, K, ldb, lda, ldc);
-  } else {
-    SPECSYM::blockProductKernel<T, M, N, blocksize,
+          B, A, d_temp_storage, K, ldb, lda, ldc);
+    } else {
+      SPECSYM::blockProductKernel<T, N, M, blocksize, true,
                                   false><<<blockCount, blocksize>>>(
-        A, B, d_temp_storage, K, lda, ldb, ldc);
+          B, A, d_temp_storage, K, ldb, lda, ldc);
+    }
+  } else {
+    if (A == B) {
+      SPECSYM::blockProductKernel<T, M, N, blocksize, false,
+                                  true><<<blockCount, blocksize>>>(
+          A, B, d_temp_storage, K, lda, ldb, ldc);
+    } else {
+      SPECSYM::blockProductKernel<T, M, N, blocksize, false,
+                                  false><<<blockCount, blocksize>>>(
+          A, B, d_temp_storage, K, lda, ldb, ldc);
+    }
   }
   SPECSYM::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
       d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);

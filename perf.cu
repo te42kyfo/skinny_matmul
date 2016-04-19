@@ -79,16 +79,21 @@ void deInitMatmul() {
 
 double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                      size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
-                     size_t blockCount, int iters = 1) {
+                     size_t blockCount, int iters, bool self) {
   GPU_ERROR(cudaDeviceSynchronize());
 
   real alpha = 2.0;
   real beta = 1.0;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                     blockCount, AOrder, BOrder, M, N, K, alpha,
-                                     A, lda, B, ldb, beta, C, ldc);
+    if (self)
+      Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                       blockCount, AOrder, BOrder, M, N, K,
+                                       alpha, A, lda, A, lda, beta, C, ldc);
+    else
+      Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                       blockCount, AOrder, BOrder, M, N, K,
+                                       alpha, A, lda, B, ldb, beta, C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -99,9 +104,10 @@ double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 int main(int argc, char** argv) {
   size_t N = PARN;
   size_t M = PARM;
+  bool self = false;
 
   if (M == 0 || N == 0) {
-    std::cout << "  M   N         K lda blockcount     time  perf\n";
+    std::cout << "  M   N         K  self  blockcount     time  perf\n";
     return 0;
   }
 
@@ -113,14 +119,11 @@ int main(int argc, char** argv) {
   double resultTime = 0;
   while (resultTime < 0.1 && K * 2 <= maxK) {
     K *= 2;
-    resultTime =
-        measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M, 26);
+    resultTime = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, M, N, M,
+                               26, 1, false);
   }
 
-
-
   int iters = max(1, (int)(0.05 / resultTime));
-
 
   size_t lda = M;
   double bestTime = 0;
@@ -130,7 +133,7 @@ int main(int argc, char** argv) {
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
       times[t] = measureMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, N,
-                               M, blockCount, iters);
+                               M, blockCount, iters, self);
     }
     sort(times.begin(), times.end());
 
@@ -140,9 +143,9 @@ int main(int argc, char** argv) {
     }
   }
 
-  cout << setw(3) << M << " " << setw(3) << N << " " << setw(9) << K << " "
-       << setw(3) << lda << " " << setw(10) << bestBlockCount << " "
-       << setprecision(3) << setw(8) << bestTime << " " << setw(5)
+  cout << setw(3) << M << " " << setw(3) << N << " " << setw(9) << K << "  "
+       << ((self) ? "true " : "false") << " " << setw(10) << bestBlockCount
+       << " " << setprecision(3) << setw(8) << bestTime << " " << setw(5)
        << M * N * K * 2 / bestTime * 1e-9 << "\n";
   cout.flush();
 

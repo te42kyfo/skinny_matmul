@@ -72,7 +72,7 @@ void printMatrix(vector<real> m1, vector<real> m2, size_t N, size_t M,
 
 bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
-                size_t blockCount) {
+                size_t blockCount, bool self) {
   real *A, *B, *d_temp_storage, *C;
 
   real alpha = 1.0;
@@ -118,31 +118,51 @@ bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   size_t temp_storage_bytes = 0;
   d_temp_storage = NULL;
 
-  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                   blockCount, AOrder, BOrder, M, N, K, alpha,
-                                   A, lda, B, ldb, beta, C, ldc);
+  if (self)
+    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, AOrder, BOrder, M, N, K, alpha,
+                                     A, lda, A, lda, beta, C, ldc);
+  else
+    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, AOrder, BOrder, M, N, K, alpha,
+                                     A, lda, B, ldb, beta, C, ldc);
 
   GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(real) * temp_storage_bytes));
 
-  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                   blockCount, AOrder, BOrder, M, N, K, alpha,
-                                   A, lda, B, ldb, beta, C, ldc);
+  if (self)
+    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, AOrder, BOrder, M, N, K, alpha,
+                                     A, lda, A, lda, beta, C, ldc);
+  else
+    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, AOrder, BOrder, M, N, K, alpha,
+                                     A, lda, B, ldb, beta, C, ldc);
+
   GPU_ERROR(
       cudaMemcpy(hC.data(), C, sizeof(real) * ldc * N, cudaMemcpyDefault));
   GPU_ERROR(
       cudaMemcpy(C, hC2.data(), sizeof(real) * ldc * N, cudaMemcpyDefault));
 
-  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                   blockCount, AOrder, BOrder, M, N, K, alpha,
-                                   A, lda, B, ldb, beta, C, ldc);
+  if (self)
+    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, AOrder, BOrder, M, N, K, alpha,
+                                     A, lda, A, lda, beta, C, ldc);
+  else
+    Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                     blockCount, AOrder, BOrder, M, N, K, alpha,
+                                     A, lda, B, ldb, beta, C, ldc);
 
   GPU_ERROR(
       cudaMemcpy(hC2.data(), C, sizeof(real) * ldc * N, cudaMemcpyDefault));
 
   GPU_ERROR(cudaDeviceSynchronize());
 
-  cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hB.data(), ldb, beta,
-           cpuC.data(), ldc);
+  if(self)
+    cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hA.data(), lda, beta,
+             cpuC.data(), ldc);
+  else
+    cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hB.data(), ldb, beta,
+             cpuC.data(), ldc);
 
   bool passed = true;
   for (size_t n = 0; n < N; n++) {
@@ -173,21 +193,23 @@ bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 20;
+  int sampleSize = 5;
 
   size_t M = PARM;
   size_t N = PARN;
-  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.1;
+  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
 
   cout << M << "xKx" << N << "\t";
   bool passed = true;
-  for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 1 * 13) {
+  for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
     for (int t = 0; t < sampleSize; t++) {
       size_t lda = M + rand() % 4;
       size_t ldb = N + rand() % 4;
       size_t ldc = M + rand() % 4;
       passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
-                           ldc, blockCount);
+                           ldc, blockCount, true);
+      passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
+                           ldc, blockCount, false);
     }
   }
   if (passed) cout << "\e[32m Passed \e[0m\n";
