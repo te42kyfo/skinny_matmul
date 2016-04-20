@@ -1,7 +1,7 @@
 #!/bin/sh
 
-xrange=32
-yrange=32
+xrange=16
+yrange=16
 
 if [ -z $1 ]; then
     echo "Specify Kernel Version"

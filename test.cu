@@ -157,17 +157,19 @@ bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 
   GPU_ERROR(cudaDeviceSynchronize());
 
-  if(self)
-    cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hA.data(), lda, beta,
-             cpuC.data(), ldc);
+  if (self)
+    cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hA.data(), lda,
+             beta, cpuC.data(), ldc);
   else
-    cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hB.data(), ldb, beta,
-             cpuC.data(), ldc);
+    cpuDgemm(AOrder, BOrder, M, N, K, alpha, hA.data(), lda, hB.data(), ldb,
+             beta, cpuC.data(), ldc);
 
   bool passed = true;
   for (size_t n = 0; n < N; n++) {
     for (size_t m = 0; m < M; m++) {
       if (hC[n * ldc + m] != cpuC[n * ldc + m]) {
+        cout << "\n( " << blockCount << " blocks, " << ((self) ? "A*A" : "A*B")
+             << ") ";
         cout << "\e[31mMismatch\e[0m\n";
 
         printMatrix(hC, cpuC, N, M, ldc);
@@ -206,10 +208,13 @@ int main(int argc, char **argv) {
       size_t lda = M + rand() % 4;
       size_t ldb = N + rand() % 4;
       size_t ldc = M + rand() % 4;
-      passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
-                           ldc, blockCount, true);
+      if (M == N)
+        passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
+                             ldc, blockCount, true);
       passed &= testMatmul(Skyblas::COLUMN, Skyblas::ROW, M, N, K, lda, ldb,
                            ldc, blockCount, false);
+      cout << ".";
+      cout.flush();
     }
   }
   if (passed) cout << "\e[32m Passed \e[0m\n";
