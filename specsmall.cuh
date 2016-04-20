@@ -3,7 +3,8 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
-namespace SPECSYM {
+
+namespace SPECSMALL {
 
 template <typename T, int M, int N>
 __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
@@ -100,22 +101,22 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
 
   int const blocksize = 256;
   if (N > M) {
-    SPECSYM::blockProductKernel<T, N, M, blocksize, true,
-                                false><<<blockCount, blocksize>>>(
+    SPECSMALL::blockProductKernel<T, N, M, blocksize, true,
+                                  false><<<blockCount, blocksize>>>(
         B, A, d_temp_storage, K, ldb, lda, ldc);
 
   } else {
     if (M == N && A == B) {
-      SPECSYM::blockProductKernel<T, M, N, blocksize, false,
-                                  true><<<blockCount, blocksize>>>(
+      SPECSMALL::blockProductKernel<T, M, N, blocksize, false,
+                                    true><<<blockCount, blocksize>>>(
           A, B, d_temp_storage, K, lda, ldb, ldc);
     } else {
-      SPECSYM::blockProductKernel<T, M, N, blocksize, false,
-                                  false><<<blockCount, blocksize>>>(
+      SPECSMALL::blockProductKernel<T, M, N, blocksize, false,
+                                    false><<<blockCount, blocksize>>>(
           A, B, d_temp_storage, K, lda, ldb, ldc);
     }
   }
-  SPECSYM::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
+  SPECSMALL::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
       d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
 }
 }
