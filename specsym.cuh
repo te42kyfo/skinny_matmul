@@ -100,17 +100,12 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
 
   int const blocksize = 256;
   if (N > M) {
-    if (A == B) {
-      SPECSYM::blockProductKernel<T, N, M, blocksize, true,
-                                  true><<<blockCount, blocksize>>>(
-          B, A, d_temp_storage, K, ldb, lda, ldc);
-    } else {
-      SPECSYM::blockProductKernel<T, N, M, blocksize, true,
-                                  false><<<blockCount, blocksize>>>(
-          B, A, d_temp_storage, K, ldb, lda, ldc);
-    }
+    SPECSYM::blockProductKernel<T, N, M, blocksize, true,
+                                false><<<blockCount, blocksize>>>(
+        B, A, d_temp_storage, K, ldb, lda, ldc);
+
   } else {
-    if (A == B) {
+    if (M == N && A == B) {
       SPECSYM::blockProductKernel<T, M, N, blocksize, false,
                                   true><<<blockCount, blocksize>>>(
           A, B, d_temp_storage, K, lda, ldb, ldc);
