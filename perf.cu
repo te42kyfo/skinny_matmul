@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <vector>
 #include <cuda_runtime.h>
+#include <complex>
 
 #include "skyblas.cuh"
+#include "cu_complex.h"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -14,7 +16,39 @@
 
 using namespace std;
 
-typedef double real;
+
+#define XSTR(s) STR(s)
+#define STR(s) #s
+
+#ifdef FC
+typedef complex<float> htype;
+typedef cuFloatComplex dtype;
+dtype makeDtype(htype v) { return make_cuFloatComplex(v.real(), v.imag()); }
+#define RAND_HTYPE(gen) htype(gen, gen)
+#define MAKE_DTYPE(v1, v2) make_cuFloatComplex(v1, v2)
+
+#elif DC
+typedef complex<double> htype;
+typedef cuDoubleComplex dtype;
+dtype makeDtype(htype v) { return make_cuDoubleComplex(v.real(), v.imag()); }
+#define RAND_HTYPE(gen) htype(gen, gen)
+#define MAKE_DTYPE(v1, v2) make_cuDoubleComplex(v1, v2)
+
+#elif FR
+typedef float htype;
+typedef float dtype;
+dtype makeDtype(htype v) { return v; }
+#define RAND_HTYPE(gen) htype(gen)
+#define MAKE_DTYPE(v1, v2) float(v1)
+
+#elif DR
+typedef double htype;
+typedef double dtype;
+dtype makeDtype(htype v) { return v; }
+#define RAND_HTYPE(gen) htype(gen)
+#define MAKE_DTYPE(v1, v2) double(v1)
+
+#endif
 
 double dtime() {
   double tseconds = 0;
@@ -35,27 +69,27 @@ inline void gpuAssert(cudaError_t code, const char* file, int line,
   }
 }
 
-__global__ void initKernel(real* A, size_t N) {
+__global__ void initKernel(dtype* A, size_t N) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   for (size_t idx = tidx; idx < N; idx += blockDim.x * gridDim.x) {
-    A[idx] = idx % 3 - 1;
+    A[idx] = MAKE_DTYPE(idx % 3 - 1, 0);
   }
 }
 
-real* A;
-real* B;
-real* C;
-real* d_temp_storage;
+dtype* A;
+dtype* B;
+dtype* C;
+dtype* d_temp_storage;
 
 size_t temp_storage_bytes;
 
 void initMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 int M, int N, int K, int lda, int ldb, int ldc,
                 size_t blockCount) {
-  GPU_ERROR(cudaMalloc(&A, sizeof(real) * lda * K));
-  GPU_ERROR(cudaMalloc(&B, sizeof(real) * ldb * K));
-  GPU_ERROR(cudaMalloc(&C, sizeof(real) * ldc * N));
+  GPU_ERROR(cudaMalloc(&A, sizeof(dtype) * lda * K));
+  GPU_ERROR(cudaMalloc(&B, sizeof(dtype) * ldb * K));
+  GPU_ERROR(cudaMalloc(&C, sizeof(dtype) * ldc * N));
   initKernel<<<52, 256>>>(A, lda * K);
   initKernel<<<52, 256>>>(B, ldb * K);
   initKernel<<<52, 256>>>(C, ldc * N);
@@ -63,11 +97,11 @@ void initMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   temp_storage_bytes = 0;
   d_temp_storage = NULL;
 
-  Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                   blockCount, AOrder, BOrder, M, N, K, 1.0, A,
-                                   lda, B, ldb, 1.0, C, ldc);
+  Skyblas::dgemm<dtype, PARM, PARN>(
+      temp_storage_bytes, d_temp_storage, blockCount, AOrder, BOrder, M, N, K,
+      makeDtype(1.0), A, lda, B, ldb, makeDtype(1.0), C, ldc);
 
-  GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(real) * temp_storage_bytes));
+  GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * temp_storage_bytes));
 }
 
 void deInitMatmul() {
@@ -82,18 +116,22 @@ double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                      size_t blockCount, int iters, bool self) {
   GPU_ERROR(cudaDeviceSynchronize());
 
-  real alpha = 2.0;
-  real beta = 1.0;
+  htype halpha = 1.0;
+  htype hbeta = 2.0;
+
+  dtype dalpha = makeDtype(halpha);
+  dtype dbeta = makeDtype(hbeta);
+
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
     if (self)
-      Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                       blockCount, AOrder, BOrder, M, N, K,
-                                       alpha, A, lda, A, lda, beta, C, ldc);
+      Skyblas::dgemm<dtype, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                        blockCount, AOrder, BOrder, M, N, K,
+                                        dalpha, A, lda, A, lda, dbeta, C, ldc);
     else
-      Skyblas::dgemm<real, PARM, PARN>(temp_storage_bytes, d_temp_storage,
-                                       blockCount, AOrder, BOrder, M, N, K,
-                                       alpha, A, lda, B, ldb, beta, C, ldc);
+      Skyblas::dgemm<dtype, PARM, PARN>(temp_storage_bytes, d_temp_storage,
+                                        blockCount, AOrder, BOrder, M, N, K,
+                                        dalpha, A, lda, B, ldb, dbeta, C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -104,7 +142,7 @@ double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 int main(int argc, char** argv) {
   size_t N = PARN;
   size_t M = PARM;
-  bool self = true;
+  bool self = false;
 
   if (M == 0 || N == 0) {
     std::cout << "  M   N         K  self  blockcount     time  perf\n";
@@ -143,7 +181,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  cout << setw(3) << M << " " << setw(3) << N << " " << setw(9) << K << "  "
+  cout << XSTR(PREC) << " " << XSTR(MODE) << " " << setw(3) << M << " "
+       << setw(3) << N << " " << setw(9) << K << "  "
        << ((self) ? "true " : "false") << " " << setw(10) << bestBlockCount
        << " " << setprecision(3) << setw(8) << bestTime << " " << setw(5)
        << M * N * K * 2 / bestTime * 1e-9 << "\n";

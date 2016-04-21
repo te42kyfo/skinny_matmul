@@ -9,6 +9,8 @@ NAME 		:= skinny_matmul
 M 			:= 1
 N			:= 1
 GENVER 		:= GENV3
+MODE 		:= DR
+CONSTANTS	:= -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) -D$(MODE)=1
 PREFIX		:= .
 
 
@@ -19,13 +21,13 @@ runperf: perf
 	$(PREFIX)/$<$M-$N-$(GENVER)
 
 perf: perf.cu genv?.cuh skyblas.cuh Makefile
-	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)  $<  $(LDFLAGS)
+	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)-$(MODE)  $<  $(LDFLAGS)
 
 
-test: $(PREFIX)/test$M-$N-$(GENVER)
+test: $(PREFIX)/test$M-$N-$(GENVER)-$(MODE)
 
-$(PREFIX)/test$M-$N-$(GENVER): test.cu genv?.cuh spec8x8.cuh specsmall.cuh gen_cublas.cuh skyblas.cuh Makefile
-	$(NVCC) $(NVCCFLAGS) -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
+$(PREFIX)/test$M-$N-$(GENVER)-$(MODE): test.cu genv?.cuh spec8x8.cuh specsmall.cuh gen_cublas.cuh skyblas.cuh Makefile
+	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
 
 
 clean:

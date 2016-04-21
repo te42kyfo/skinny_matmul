@@ -8,7 +8,7 @@
 #include <omp.h>
 #include <random>
 #include <complex>
-
+#include <string>
 #include "skyblas.cuh"
 
 #if !defined PARM || !defined PARN
@@ -17,38 +17,44 @@
 
 using namespace std;
 
-#define PREC FLOAT
-#define MODE COMPLEX
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
 
-
-#if PREC == FLOAT && MODE == TRUE
+#ifdef FC
 typedef complex<float> htype;
 typedef cuFloatComplex dtype;
 dtype makeDtype(htype v) { return make_cuFloatComplex(v.real(), v.imag()); }
 #define RAND_HTYPE(gen) htype(gen, gen)
+#define MAKE_DTYPE(v1, v2) make_cuFloatComplex(v1, v2)
+string mode = "float complex";
 
-#elif PREC == DOUBLE && MODE == TRUE
+#elif DC
 typedef complex<double> htype;
 typedef cuDoubleComplex dtype;
 dtype makeDtype(htype v) { return make_cuDoubleComplex(v.real(), v.imag()); }
 #define RAND_HTYPE(gen) htype(gen, gen)
+#define MAKE_DTYPE(v1, v2) make_cuDoubleComplex(v1, v2)
+string mode = "double complex";
 
-#elif PREC == FLOAT && MODE == FALSE
+#elif FR
 typedef float htype;
 typedef float dtype;
 dtype makeDtype(htype v) { return v; }
 #define RAND_HTYPE(gen) htype(gen)
+#define MAKE_DTYPE(v1, v2) float(v1)
+string mode = "float real";
 
-#elif PREC == DOUBLE && MODE == FALSE
+#elif DR
 typedef double htype;
 typedef double dtype;
 dtype makeDtype(htype v) { return v; }
 #define RAND_HTYPE(gen) htype(gen)
+#define MAKE_DTYPE(v1, v2) double(v1)
+string mode = "double real";
 
 #endif
+
 
 double dtime() {
   double tseconds = 0;
@@ -236,7 +242,7 @@ int main(int argc, char **argv) {
   size_t N = PARN;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
 
-  cout << M << "xKx" << N << "  " << XSTR(PREC) << " " << XSTR(MODE) << " ";
+  cout << M << "xKx" << N << "  " << mode << " ";
   bool passed = true;
   for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
     for (int t = 0; t < sampleSize; t++) {
