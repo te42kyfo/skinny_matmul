@@ -2,7 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <iostream>
-
+#include "cu_complex.h"
 
 namespace SPECSMALL {
 
@@ -17,12 +17,13 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
   int n = tidx / M;
   int m = tidx % M;
 
-  T sum = 0.0;
+  T sum;
+  zero(sum);
   for (int i = 0; i < blockCount; i++) {
-    sum += blockResults[i * N * ldc + n * ldc + m];
+    sum = accu(sum, blockResults[i * N * ldc + n * ldc + m]);
   }
 
-  result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
+  result[n * ldc + m] = axpby(result[n * ldc + m], sum, beta, alpha);
 }
 
 template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE, bool SELF>
@@ -42,11 +43,11 @@ __launch_bounds__(BLOCKSIZE,
 
   __shared__ T blockStorage[BLOCKSIZE];
 
-  blockStorage[threadIdx.x] = 0.0;
+  zero(blockStorage[threadIdx.x]);
 
   T threadSum[N];
   for (int n = 0; n < N; n++) {
-    threadSum[n] = 0;
+    zero(threadSum[n]);
   }
 
   for (int idx = (tidx / 32) * rowsPerWarp + warpLane / M; idx < K;
@@ -59,7 +60,7 @@ __launch_bounds__(BLOCKSIZE,
     }
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
-      threadSum[n] += av * blockStorage[localAddress + n];
+      threadSum[n] = axpy(threadSum[n], av, blockStorage[localAddress + n]);
     }
   }
 
@@ -69,10 +70,11 @@ __launch_bounds__(BLOCKSIZE,
     __syncthreads();
 
     if (threadIdx.x < M) {
-      T blockSum = 0.0;
+      T blockSum;
+      zero(blockSum);
       for (int w = 0; w < BLOCKSIZE / 32; w++) {
         for (int wp = threadIdx.x; wp < rowsPerWarp * M; wp += M) {
-          blockSum += blockStorage[w * 32 + wp];
+          blockSum = accu(blockSum, blockStorage[w * 32 + wp]);
         }
       }
       if (TRANSPOSE) {
