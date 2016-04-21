@@ -71,6 +71,26 @@ void dgemm<float, 0, 0>(size_t &temp_storage_bytes, float *d_temp_storage,
   std::cout << "Can't instance with zero matrix dimensions\n";
 }
 template <>
+void dgemm<cuFloatComplex, 0, 0>(
+    size_t &temp_storage_bytes, cuFloatComplex *d_temp_storage,
+    const size_t blockCount, const MEMORY_ORDER AOrder,
+    const MEMORY_ORDER BOrder, const int M, const int N, const int K,
+    const cuFloatComplex alpha, const cuFloatComplex *A, const int lda,
+    const cuFloatComplex *B, const int ldb, const cuFloatComplex beta,
+    cuFloatComplex *C, const int ldc) {
+  std::cout << "Can't instance with zero matrix dimensions\n";
+}
+template <>
+void dgemm<cuDoubleComplex, 0, 0>(
+    size_t &temp_storage_bytes, cuDoubleComplex *d_temp_storage,
+    const size_t blockCount, const MEMORY_ORDER AOrder,
+    const MEMORY_ORDER BOrder, const int M, const int N, const int K,
+    const cuDoubleComplex alpha, const cuDoubleComplex *A, const int lda,
+    const cuDoubleComplex *B, const int ldb, const cuDoubleComplex beta,
+    cuDoubleComplex *C, const int ldc) {
+  std::cout << "Can't instance with zero matrix dimensions\n";
+}
+template <>
 void dgemm<double, 0, 0>(size_t &temp_storage_bytes, double *d_temp_storage,
                          const size_t blockCount, const MEMORY_ORDER AOrder,
                          const MEMORY_ORDER BOrder, const int M, const int N,
