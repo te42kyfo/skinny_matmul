@@ -16,7 +16,6 @@
 
 using namespace std;
 
-
 #define XSTR(s) STR(s)
 #define STR(s) #s
 
@@ -26,6 +25,7 @@ typedef cuFloatComplex dtype;
 dtype makeDtype(htype v) { return make_cuFloatComplex(v.real(), v.imag()); }
 #define RAND_HTYPE(gen) htype(gen, gen)
 #define MAKE_DTYPE(v1, v2) make_cuFloatComplex(v1, v2)
+string mode = "float complex";
 
 #elif DC
 typedef complex<double> htype;
@@ -33,6 +33,7 @@ typedef cuDoubleComplex dtype;
 dtype makeDtype(htype v) { return make_cuDoubleComplex(v.real(), v.imag()); }
 #define RAND_HTYPE(gen) htype(gen, gen)
 #define MAKE_DTYPE(v1, v2) make_cuDoubleComplex(v1, v2)
+string mode = "double complex";
 
 #elif FR
 typedef float htype;
@@ -40,6 +41,7 @@ typedef float dtype;
 dtype makeDtype(htype v) { return v; }
 #define RAND_HTYPE(gen) htype(gen)
 #define MAKE_DTYPE(v1, v2) float(v1)
+string mode = "float real";
 
 #elif DR
 typedef double htype;
@@ -47,6 +49,7 @@ typedef double dtype;
 dtype makeDtype(htype v) { return v; }
 #define RAND_HTYPE(gen) htype(gen)
 #define MAKE_DTYPE(v1, v2) double(v1)
+string mode = "double real";
 
 #endif
 
@@ -145,7 +148,7 @@ int main(int argc, char** argv) {
   bool self = false;
 
   if (M == 0 || N == 0) {
-    std::cout << "  M   N         K  self  blockcount     time  perf\n";
+    std::cout << "  M   N         K  blockcount     time  perf\n";
     return 0;
   }
 
@@ -181,10 +184,9 @@ int main(int argc, char** argv) {
     }
   }
 
-  cout << XSTR(PREC) << " " << XSTR(MODE) << " " << setw(3) << M << " "
-       << setw(3) << N << " " << setw(9) << K << "  "
-       << ((self) ? "true " : "false") << " " << setw(10) << bestBlockCount
-       << " " << setprecision(3) << setw(8) << bestTime << " " << setw(5)
+  cout  << setw(3) << M << " " << setw(3) << N << " " << setw(9)
+       << K << "  " << setw(10) << bestBlockCount << " " << setprecision(3)
+       << setw(8) << bestTime << " " << setw(5)
        << M * N * K * 2 / bestTime * 1e-9 << "\n";
   cout.flush();
 
