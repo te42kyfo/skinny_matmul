@@ -17,9 +17,38 @@
 
 using namespace std;
 
-typedef double realt;
-typedef complex<realt> htype;
+#define PREC FLOAT
+#define MODE COMPLEX
+
+#define XSTR(s) STR(s)
+#define STR(s) #s
+
+
+#if PREC == FLOAT && MODE == TRUE
+typedef complex<float> htype;
+typedef cuFloatComplex dtype;
+dtype makeDtype(htype v) { return make_cuFloatComplex(v.real(), v.imag()); }
+#define RAND_HTYPE(gen) htype(gen, gen)
+
+#elif PREC == DOUBLE && MODE == TRUE
+typedef complex<double> htype;
 typedef cuDoubleComplex dtype;
+dtype makeDtype(htype v) { return make_cuDoubleComplex(v.real(), v.imag()); }
+#define RAND_HTYPE(gen) htype(gen, gen)
+
+#elif PREC == FLOAT && MODE == FALSE
+typedef float htype;
+typedef float dtype;
+dtype makeDtype(htype v) { return v; }
+#define RAND_HTYPE(gen) htype(gen)
+
+#elif PREC == DOUBLE && MODE == FALSE
+typedef double htype;
+typedef double dtype;
+dtype makeDtype(htype v) { return v; }
+#define RAND_HTYPE(gen) htype(gen)
+
+#endif
 
 double dtime() {
   double tseconds = 0;
@@ -73,35 +102,6 @@ void printMatrix(vector<htype> m1, vector<htype> m2, size_t N, size_t M,
   }
 }
 
-template <typename cT, typename sT>
-cT makeDtype(sT hval) {
-  return hval;
-}
-
-template <>
-cuDoubleComplex makeDtype<cuDoubleComplex, double>(double hval) {
-  return make_cuDoubleComplex(hval, 0);
-}
-template <>
-cuFloatComplex makeDtype<cuFloatComplex, float>(float hval) {
-  return make_cuFloatComplex(hval, 0);
-}
-
-template <typename cT, typename sT>
-cT randHtype(sT v1, sT v2) {
-  return v1;
-}
-
-template <>
-complex<float> randHtype<complex<float>, float>(float v1, float v2) {
-  return complex<float>(v1, v2);
-}
-
-template <>
-complex<double> randHtype<complex<double>, double>(double v1, double v2) {
-  return complex<double>(v1, v2);
-}
-
 bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
                 size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                 size_t blockCount, bool self) {
@@ -110,8 +110,8 @@ bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
   htype halpha = 1.0;
   htype hbeta = 2.0;
 
-  dtype dalpha = makeDtype<dtype, realt>(1.0);
-  dtype dbeta = makeDtype<dtype, realt>(2.0);
+  dtype dalpha = makeDtype(halpha);
+  dtype dbeta = makeDtype(hbeta);
 
   cout.flush();
   GPU_ERROR(cudaMalloc(&A, sizeof(dtype) * lda * K));
@@ -132,15 +132,15 @@ bool testMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
     uniform_int_distribution<int> dis(-2, 2);
 #pragma omp for
     for (size_t i = 0; i < lda * K; i++) {
-      hA[i] = randHtype<htype, realt>(dis(gen), dis(gen));
+      hA[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldb * K; i++) {
-      hB[i] = randHtype<htype, realt>(dis(gen), dis(gen));
+      hB[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldc * N; i++) {
-      hC2[i] = hC[i] = cpuC[i] = randHtype<htype, realt>(dis(gen), dis(gen));
+      hC2[i] = hC[i] = cpuC[i] = RAND_HTYPE(dis(gen));
     }
   }
   GPU_ERROR(
@@ -236,7 +236,7 @@ int main(int argc, char **argv) {
   size_t N = PARN;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
 
-  cout << M << "xKx" << N << "\t";
+  cout << M << "xKx" << N << "  " << XSTR(PREC) << " " << XSTR(MODE) << " ";
   bool passed = true;
   for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
     for (int t = 0; t < sampleSize; t++) {
