@@ -1,7 +1,7 @@
 #!/bin/sh
 
-if [ -z $1 ] || [ -z $2 ] || [ -z $3 ]; then
-    echo "Usage: $0 <prefix> <commit hash> <kernel version>"
+if [ -z $1 ] || [ -z $2 ] || [ -z $3 ] || [ -z $4 ]  || [ -z $5 ]; then
+    echo "Usage: $0 <prefix> <commit hash> <kernel version> <mode> <range>"
     exit
 fi
 
@@ -13,8 +13,8 @@ git checkout $2
 
 mkdir build
 
-rm diag_$2_$3.txt
+rm diag_$2_$3_$5.txt
 
-./run_diagonal_perf.sh $3 32 | tee --append diag_$2_$3.txt
+./run_diagonal_perf.sh $3 $4 $5 | tee --append diag_$2_$3_$5.txt
 
 
