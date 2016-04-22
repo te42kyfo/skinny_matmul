@@ -27,10 +27,9 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
 }
 
 template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE, bool SELF>
-__launch_bounds__(BLOCKSIZE,
-                  N <= 8 ? 8 : (1 << 16) / BLOCKSIZE / N / 4 - 1) __global__
-    void blockProductKernel(const T *A, const T *B, T *out, const int K,
-                            const int lda, const int ldb, const int ldc) {
+__global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
+                                   const int lda, const int ldb,
+                                   const int ldc) {
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   int warpLane = threadIdx.x % 32;
   int rowsPerWarp = 32 / M;
@@ -102,6 +101,7 @@ void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
   }
 
   int const blocksize = 256;
+
   if (N > M) {
     SPECSMALL::blockProductKernel<T, N, M, blocksize, true,
                                   false><<<blockCount, blocksize>>>(
