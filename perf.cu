@@ -26,6 +26,7 @@ dtype makeDtype(htype v) { return make_cuFloatComplex(v.real(), v.imag()); }
 #define RAND_HTYPE(gen) htype(gen, gen)
 #define MAKE_DTYPE(v1, v2) make_cuFloatComplex(v1, v2)
 string mode = "float complex";
+int flopsPerCell = 8;
 
 #elif DC
 typedef complex<double> htype;
@@ -34,6 +35,7 @@ dtype makeDtype(htype v) { return make_cuDoubleComplex(v.real(), v.imag()); }
 #define RAND_HTYPE(gen) htype(gen, gen)
 #define MAKE_DTYPE(v1, v2) make_cuDoubleComplex(v1, v2)
 string mode = "double complex";
+int flopsPerCell = 8;
 
 #elif FR
 typedef float htype;
@@ -42,6 +44,7 @@ dtype makeDtype(htype v) { return v; }
 #define RAND_HTYPE(gen) htype(gen)
 #define MAKE_DTYPE(v1, v2) float(v1)
 string mode = "float real";
+int flopsPerCell = 2;
 
 #elif DR
 typedef double htype;
@@ -50,6 +53,7 @@ dtype makeDtype(htype v) { return v; }
 #define RAND_HTYPE(gen) htype(gen)
 #define MAKE_DTYPE(v1, v2) double(v1)
 string mode = "double real";
+int flopsPerCell = 2;
 
 #endif
 
@@ -187,7 +191,7 @@ int main(int argc, char** argv) {
   cout  << setw(3) << M << " " << setw(3) << N << " " << setw(9)
        << K << "  " << setw(10) << bestBlockCount << " " << setprecision(3)
        << setw(8) << bestTime << " " << setw(5)
-       << M * N * K * 2 / bestTime * 1e-9 << "\n";
+       << M * N * K * flopsPerCell / bestTime * 1e-9 << "\n";
   cout.flush();
 
   deInitMatmul();
