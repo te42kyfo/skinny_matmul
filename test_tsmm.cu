@@ -132,15 +132,15 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
     uniform_int_distribution<int> dis(-2, 2);
 #pragma omp for
     for (size_t i = 0; i < lda * K; i++) {
-      hA[i] = 1;//RAND_HTYPE(dis(gen));
+      hA[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldb * M; i++) {
-      hB[i] = 1;//RAND_HTYPE(dis(gen));
+      hB[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldc * K; i++) {
-      hC[i] = cpuC[i] = 1;//RAND_HTYPE(dis(gen));
+      hC[i] = cpuC[i] = RAND_HTYPE(dis(gen));
     }
   }
   GPU_ERROR(
@@ -188,15 +188,15 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 1;
+  int sampleSize = 2;
 
   size_t M = PARM;
   size_t N = PARN;
-  size_t K = 10;  // (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
+  size_t K =  (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
 
   cout << M << "xKx" << N << "  " << mode << " ";
   bool passed = true;
-  for (size_t blockCount = 1 * 13; blockCount <= 1 * 13; blockCount += 2 * 13) {
+  for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 1 * 13) {
     for (int t = 0; t < sampleSize; t++) {
       size_t lda = M + rand() % 4;
       size_t ldb = N + rand() % 4;
