@@ -11,9 +11,7 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
                              int blockCount, size_t lda, size_t ldb,
                              size_t ldc) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
-
   if (tidx >= M * N) return;
-
   int n = tidx / M;
   int m = tidx % M;
 

@@ -13,8 +13,8 @@ git checkout $2
 
 mkdir build
 
-rm diag_$2_$3_$5.txt
+rm diag_$2_$3_$4.txt
 
-./run_diagonal_perf.sh $3 $4 $5 | tee --append diag_$2_$3_$5.txt
+./run_diagonal_perf.sh $3 $4 $5 | tee --append diag_$2_$3_$4.txt
 
 

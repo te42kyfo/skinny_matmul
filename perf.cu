@@ -149,7 +149,7 @@ double measureMatmul(Skyblas::MEMORY_ORDER AOrder, Skyblas::MEMORY_ORDER BOrder,
 int main(int argc, char** argv) {
   size_t N = PARN;
   size_t M = PARM;
-  bool self = false;
+  bool self = true;
 
   if (M == 0 || N == 0) {
     std::cout << "  M   N         K  blockcount     time  perf\n";

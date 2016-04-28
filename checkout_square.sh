@@ -13,7 +13,7 @@ git checkout $2
 
 mkdir build
 
-rm square_$2_$3_$5.txt
+rm square_$2_$3_$4.txt
 
-./run_square_perf.sh $3 $4 $5 $6 | tee --append square_$2_$3_$5.txt
+./run_square_perf.sh $3 $4 $5 $6 | tee --append square_$2_$3_$4.txt
 
