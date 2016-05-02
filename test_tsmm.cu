@@ -92,7 +92,7 @@ void cpuDgemm(const size_t M, const size_t N, const size_t K, const htype alpha,
 void printMatrix(vector<htype> m1, vector<htype> m2, size_t N, size_t K,
                  size_t ldc, string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  for (size_t k = 0; k < K; k++) {
+  for (size_t k = 0; k < (K > 10 ? 10 : K); k++) {
     for (size_t n = 0; n < N; n++) {
       if (m1[k * ldc + n] == m2[k * ldc + n])
         cout << matchColor;
@@ -102,6 +102,9 @@ void printMatrix(vector<htype> m1, vector<htype> m2, size_t N, size_t K,
       cout << m1[k * ldc + n] << "\e[0m\t";
     }
     cout << "\n";
+  }
+  if (K > 10) {
+    cout << "...\n";
   }
 }
 
@@ -192,7 +195,7 @@ int main(int argc, char **argv) {
 
   size_t M = PARM;
   size_t N = PARN;
-  size_t K =  (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
+  size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
 
   cout << M << "xKx" << N << "  " << mode << " ";
   bool passed = true;
