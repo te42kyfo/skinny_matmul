@@ -142,7 +142,7 @@ int main(int argc, char** argv) {
   double resultTime = 0;
   while (resultTime < 0.1 && K * 2 <= maxK) {
     K *= 2;
-    resultTime = measureMatmul(M, N, K, M, N, M, 26, 1);
+    resultTime = measureMatmul(M, N, K, M, N, N, 26, 1);
   }
 
   int iters = max(1, (int)(0.05 / resultTime));
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
     int sampleSize = 3;
     vector<double> times(sampleSize);
     for (int t = 0; t < sampleSize; t++) {
-      times[t] = measureMatmul(M, N, K, lda, N, M, blockCount, iters);
+      times[t] = measureMatmul(M, N, K, lda, N, N, blockCount, iters);
     }
     sort(times.begin(), times.end());
 
