@@ -1,22 +1,24 @@
 #include "cu_complex.h"
 
 template <typename T, int M, int N, int BLOCKSIZE, bool betaiszero>
-static __global__ void ghost_tsmm_cu_rm_cm(const T * A,
-                                           const T *__restrict__ B, T *out,
-                                           const int K, const int lda,
+static __global__ void ghost_tsmm_cu_rm_cm(const T *A, const T *__restrict__ B,
+                                           T *out, const int K, const int lda,
                                            const int ldb, const int ldc) {
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
-  int n = tidx % N;
-  int warpLane = threadIdx.x % 32;
+  int n = threadIdx.x % N;
 
-  T __shared__ rowCache[BLOCKSIZE];
+  int localRow = threadIdx.x / N;
+
+  T __shared__ rowCache[M * BLOCKSIZE / N];
 
   for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
-    rowCache[threadIdx.x] = A[row * lda + threadIdx.x % N];
+    for (int i = 0; i < M / N; i++) {
+      rowCache[localRow * M + n + i * N] = A[row * lda + n + i * N];
+    }
 
     T sum = 0;
-    for (int m = 0; m < M; m++) {
-      sum += rowCache[threadIdx.x - (warpLane % N) + m] * B[m * ldb + n];
+    for (int m = 0; m < M; m ++) {
+      sum += rowCache[localRow * M + m] * B[m * ldb + n];
     }
 
     out[row * ldc + n] = sum;
