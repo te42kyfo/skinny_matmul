@@ -1,6 +1,22 @@
 #include "cu_complex.h"
 
 template <typename T, int M, int N, int BLOCKSIZE, bool betaiszero>
+static __global__ void tsmm_fallback(const T *A, const T *__restrict__ B,
+                                     T *out, const int K, const int lda,
+                                     const int ldb, const int ldc) {
+  int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
+  int n = threadIdx.x % N;
+
+  for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
+    T sum = 0;
+    for (int m = 0; m < M; m++) {
+      sum += A[row * lda + m] * B[m * ldb + n];
+    }
+    out[row * ldc + n] = sum;
+  }
+}
+
+template <typename T, int M, int N, int BLOCKSIZE, bool betaiszero>
 static __global__ void ghost_tsmm_cu_rm_cm(const T *A, const T *__restrict__ B,
                                            T *out, const int K, const int lda,
                                            const int ldb, const int ldc) {
@@ -48,14 +64,22 @@ static __global__ void ghost_tsmm_cu_rm_cm2(const T *__restrict__ A,
                                             T *__restrict__ out, const int K,
                                             const int lda, const int ldb,
                                             const int ldc) {
-  int m = threadIdx.x % M;
+  const int GANGSIZE = 32 / sizeof(T);
+
+  int gId = threadIdx.x % GANGSIZE;
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
-  for (int row = tidx / M; row < K; row += gridDim.x * BLOCKSIZE / M) {
-    T vA = A[row * lda + m];
+  for (int row = tidx / GANGSIZE; row < K;
+       row += gridDim.x * BLOCKSIZE / GANGSIZE) {
     for (int n = 0; n < N; n++) {
-      T tval = vA * B[m * ldb + n];
-      out[row * ldc + n] = warpReduce(tval, M);
+      T gval;
+      zero(gval);
+      for (int i = 0; i < (M - 1) / GANGSIZE + 1; i++) {
+        int m = i * GANGSIZE + gId;
+        if (m < M || M % GANGSIZE == 0)
+          gval = axpy(gval, A[row * lda + m], B[m * ldb + n]);
+      }
+      out[row * ldc + n] = warpReduce(gval, GANGSIZE);
     }
   }
 }
@@ -65,6 +89,15 @@ void tsmm(const size_t blockCount, const int K, const T alpha, const T *A,
           const int lda, const T *B, const int ldb, const T beta, T *C,
           const int ldc) {
   const int BLOCKSIZE = 256;
-  ghost_tsmm_cu_rm_cm2<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
-      A, B, C, K, lda, ldb, ldc);
+  if (M == N) {
+    ghost_tsmm_cu_rm_cm<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
+        A, B, C, K, lda, ldb, ldc);
+  } else if (M > 32 / sizeof(T)) {
+    ghost_tsmm_cu_rm_cm2<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
+        A, B, C, K, lda, ldb, ldc);
+  } else {
+    const int BLOCKSIZE = 256;
+    tsmm_fallback<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
+        A, B, C, K, lda, ldb, ldc);
+  }
 }
