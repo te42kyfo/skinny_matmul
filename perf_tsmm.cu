@@ -108,12 +108,6 @@ double measureMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                      size_t blockCount, int iters) {
   GPU_ERROR(cudaDeviceSynchronize());
 
-  htype halpha = 1.0;
-  htype hbeta = 2.0;
-
-  dtype dalpha = makeDtype(halpha);
-  dtype dbeta = makeDtype(hbeta);
-
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
     tsmm<dtype, PARM, PARN>(blockCount, K, makeDtype(1.0), A, lda, B, ldb,
