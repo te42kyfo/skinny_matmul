@@ -108,15 +108,20 @@ double measureMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                      size_t blockCount, int iters) {
   GPU_ERROR(cudaDeviceSynchronize());
 
+  bool passed = true;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    tsmm<dtype, PARM, PARN>(blockCount, K, makeDtype(1.0), A, lda, B, ldb,
-                            makeDtype(1.0), C, ldc);
+    passed = tsmm<dtype, PARM, PARN>(blockCount, K, makeDtype(1.0), A, lda, B,
+                                     ldb, makeDtype(1.0), C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
+  double time = (t2 - t1) / iters;
 
-  return (t2 - t1) / iters;
+  if (!passed)
+    return -time;
+  else
+    return time;
 }
 
 int main(int argc, char** argv) {
@@ -142,7 +147,7 @@ int main(int argc, char** argv) {
   int iters = max(1, (int)(0.05 / resultTime));
 
   size_t lda = M;
-  double bestTime = 0;
+  double bestTime = -1;
   int bestBlockCount = 0;
   for (int blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
     int sampleSize = 3;
@@ -150,9 +155,13 @@ int main(int argc, char** argv) {
     for (int t = 0; t < sampleSize; t++) {
       times[t] = measureMatmul(M, N, K, lda, N, N, blockCount, iters);
     }
+    times.erase(remove_if(begin(times), end(times), [](double time) {
+                  return time < 0;
+                }), end(times));
     sort(times.begin(), times.end());
 
-    if (times[sampleSize / 2] < bestTime || bestBlockCount == 0) {
+    if (!times.empty() && times[sampleSize / 2] < bestTime ||
+        bestBlockCount == 0) {
       bestTime = times[sampleSize / 2];
       bestBlockCount = blockCount;
     }
@@ -162,7 +171,7 @@ int main(int argc, char** argv) {
        << setw(10) << bestBlockCount << " " << setprecision(3) << setw(8)
        << bestTime << " " << setw(5)
        << M * N * K * flopsPerCell / bestTime * 1e-9 << " " << setw(5)
-       << (K*N + K*M)*sizeof(dtype) / bestTime * 1e-9 << "\n";
+       << (K * N + K * M) * sizeof(dtype) / bestTime * 1e-9 << "\n";
   cout.flush();
 
   deInitMatmul();
