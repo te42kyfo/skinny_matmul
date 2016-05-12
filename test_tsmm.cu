@@ -49,7 +49,8 @@ string mode = "float real";
 typedef double htype;
 typedef double dtype;
 dtype makeDtype(htype v) { return v; }
-#define RAND_HTYPE(gen) htype(gen)
+#define RAND_HTYPE(gen) 1
+// htype(gen)
 #define MAKE_DTYPE(v1, v2) double(v1)
 string mode = "double real";
 
@@ -89,10 +90,15 @@ void cpuDgemm(const size_t M, const size_t N, const size_t K, const htype alpha,
   }
 }
 
-void printMatrix(vector<htype> m1, vector<htype> m2, size_t N, size_t K,
-                 size_t ldc, string matchColor = "\e[32m",
+void printMatrix(const vector<htype> &m1, const vector<htype> &m2, size_t N,
+                 size_t K, size_t ldc, size_t position = 0,
+                 string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  for (size_t k = 0; k < (K > 10 ? 10 : K); k++) {
+  const size_t range = 5;
+  size_t k = position < range ? 0 : position - range;
+  cout << " - " << k << " - \n";
+
+  for (; k < K && k < position + range; k++) {
     for (size_t n = 0; n < N; n++) {
       if (m1[k * ldc + n] == m2[k * ldc + n])
         cout << matchColor;
@@ -103,9 +109,7 @@ void printMatrix(vector<htype> m1, vector<htype> m2, size_t N, size_t K,
     }
     cout << "\n";
   }
-  if (K > 10) {
-    cout << "...\n";
-  }
+  cout << " - " << k << " - \n";
 }
 
 bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
@@ -135,15 +139,15 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
     uniform_int_distribution<int> dis(-2, 2);
 #pragma omp for
     for (size_t i = 0; i < lda * K; i++) {
-      hA[i] = RAND_HTYPE(dis(gen));
+      hA[i] =  RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldb * M; i++) {
-      hB[i] = RAND_HTYPE(dis(gen));
+      hB[i] =  RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldc * K; i++) {
-      hC[i] = cpuC[i] = RAND_HTYPE(dis(gen));
+      hC[i] = cpuC[i] =  RAND_HTYPE(dis(gen));
     }
   }
   GPU_ERROR(
@@ -153,7 +157,11 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
   GPU_ERROR(
       cudaMemcpy(C, hC.data(), sizeof(htype) * ldc * K, cudaMemcpyDefault));
 
-  tsmm<dtype, PARM, PARN>(blockCount, K, dalpha, A, lda, B, ldb, dbeta, C, ldc);
+  if (!tsmm<dtype, PARM, PARN>(blockCount, K, dalpha, A, lda, B, ldb, dbeta, C,
+                               ldc)) {
+    cerr << "Parameters not implemented\n";
+    return false;
+  }
 
   GPU_ERROR(
       cudaMemcpy(hC.data(), C, sizeof(htype) * ldc * K, cudaMemcpyDefault));
@@ -164,18 +172,20 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
            ldc);
 
   bool passed = true;
-  for (size_t n = 0; n < N; n++) {
-    for (size_t k = 0; k < K; k++) {
+
+  for (size_t k = 0; k < K; k++) {
+    for (size_t n = 0; n < N; n++) {
       if (hC[k * ldc + n] != cpuC[k * ldc + n]) {
         cout << "\n( " << blockCount << " blocks, " << ((self) ? "A*A" : "A*B")
              << ") ";
-        cout << "\e[31mMismatch\e[0m\n";
+        cout << "\e[31mMismatch\e[0m at " << k << ", " << n << "; "
+             << hC[k * ldc + n] << " != " << cpuC[k * ldc + n] << "\n";
 
-        printMatrix(hC, cpuC, N, K, ldc);
+        printMatrix(hC, cpuC, N, K, ldc, k);
         cout << "--\n";
-        printMatrix(cpuC, cpuC, N, K, ldc, "\e[0m");
+        printMatrix(cpuC, cpuC, N, K, ldc, k, "\e[0m");
         cout << "--\n\n";
-
+        cout << K << " Rows\n";
         passed = false;
         break;
       }
@@ -191,19 +201,23 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
 }
 
 int main(int argc, char **argv) {
-  int sampleSize = 2;
+  int sampleSize = 4;
 
   size_t M = PARM;
   size_t N = PARN;
   size_t K = (size_t)5 * 1024 * 1024 * 1024 / (M + N) / 8 * 0.02;
 
+  random_device r;
+  default_random_engine gen(r());
+  uniform_int_distribution<int> dis(0, 4);
+
   cout << M << "xKx" << N << "  " << mode << " ";
   bool passed = true;
-  for (size_t blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 1 * 13) {
+  for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
     for (int t = 0; t < sampleSize; t++) {
-      size_t lda = M + rand() % 4;
-      size_t ldb = N + rand() % 4;
-      size_t ldc = M + rand() % 4;
+      size_t lda = M + dis(gen);
+      size_t ldb = N + dis(gen);
+      size_t ldc = N + dis(gen);
 
       passed &= testMatmul(M, N, K, lda, ldb, ldc, blockCount, false);
       cout << ".";
