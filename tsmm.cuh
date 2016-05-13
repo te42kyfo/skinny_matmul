@@ -13,7 +13,7 @@ static __global__ void tsmm_fallback_kernel(const T *A, const T *__restrict__ B,
     T sum;
     zero(sum);
     for (int m = 0; m < M; m++) {
-      sum += A[row * lda + m] * B[m * ldb + n];
+      sum = axpy(sum, A[row * lda + m], B[m * ldb + n]);
     }
     out[row * ldc + n] = sum;
   }
@@ -23,21 +23,26 @@ template <typename T, int M, int N, int BLOCKSIZE, bool betaiszero>
 static __global__ void tsmm_v1_kernel(const T *A, const T *__restrict__ B,
                                       T *out, const int K, const int lda,
                                       const int ldb, const int ldc) {
-  int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
-  int n = threadIdx.x % N;
+  int warpLane = threadIdx.x % 32;
+  const int rowsPerWarp = 32 / N;
+  const int n = warpLane % N;
 
-  int localRow = threadIdx.x / N;
+  if (warpLane >= rowsPerWarp * N) {
+    warpLane = rowsPerWarp * N - 1;
+  }
+  const int localRow = threadIdx.x / 32 * rowsPerWarp + warpLane / N;
 
-  T __shared__ rowCache[(M / N < 4) ? M * BLOCKSIZE / N : 1];
+  T __shared__ rowCache[(M / N <= 8) ? M * BLOCKSIZE / 32 * rowsPerWarp : 1];
 
-  for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
+  for (int row = blockIdx.x * BLOCKSIZE / 32 * rowsPerWarp + localRow; row < K;
+       row += BLOCKSIZE * gridDim.x / 32 * rowsPerWarp) {
     for (int i = 0; i < M / N; i++) {
       rowCache[localRow * M + n + i * N] = A[row * lda + n + i * N];
     }
 
     T sum = 0;
     for (int m = 0; m < M; m++) {
-      sum += rowCache[localRow * M + m] * B[m * ldb + n];
+      sum = axpy(sum, rowCache[localRow * M + m], B[m * ldb + n]);
     }
 
     out[row * ldc + n] = sum;
@@ -102,7 +107,7 @@ bool tsmm_v1(const size_t blockCount, const int K, const T alpha, const T *A,
              const int ldc) {
   const int BLOCKSIZE = 256;
 
-  if (M % N == 0 && (M & (M - 1)) == 0 && M / N < 3) {
+  if (N >= 4 && M >= 4 && M % N == 0 && M / N <= 6) {
     tsmm_v1_kernel<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
         A, B, C, K, lda, ldb, ldc);
     return true;
@@ -117,7 +122,7 @@ bool tsmm_v2(const size_t blockCount, const int K, const T alpha, const T *A,
              const int ldc) {
   const int BLOCKSIZE = 256;
 
-  if (M > 32 / sizeof(T)) {
+  if (M > N && M >= 32 / sizeof(T) && (N < 8 || M % (32 / sizeof(T)) == 0)) {
     tsmm_v2_kernel<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
         A, B, C, K, lda, ldb, ldc);
     return true;
@@ -138,5 +143,14 @@ bool tsmm(const size_t blockCount, const int K, const T alpha, const T *A,
   if (tsmm_fallback<T, M, N>(blockCount, K, alpha, A, lda, B, ldb, beta, C,
                              ldc))
     return true;
+  return false;
+}
+
+template <>
+bool tsmm<double, 0, 0>(const size_t blockCount, const int K,
+                        const double alpha, const double *A, const int lda,
+                        const double *B, const int ldb, const double beta,
+                        double *C, const int ldc) {
+  std::cout << "not implemented\n";
   return false;
 }
