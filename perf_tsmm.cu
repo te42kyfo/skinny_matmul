@@ -160,18 +160,22 @@ int main(int argc, char** argv) {
                 }), end(times));
     sort(times.begin(), times.end());
 
-    if (!times.empty() && times[sampleSize / 2] < bestTime ||
-        bestBlockCount == 0) {
+    if (times.size() != 0 &&
+        (times[sampleSize / 2] < bestTime || bestBlockCount == 0)) {
       bestTime = times[sampleSize / 2];
       bestBlockCount = blockCount;
     }
   }
+  double flops = 0;
+  double bw = 0;
 
+  if (bestTime > 0) {
+    flops = M * N * K * flopsPerCell / bestTime * 1e-9;
+    bw = (K * N + K * M) * sizeof(dtype) / bestTime * 1e-9;
+  }
   cout << setw(3) << M << " " << setw(3) << N << " " << setw(9) << K << "  "
        << setw(10) << bestBlockCount << " " << setprecision(3) << setw(8)
-       << bestTime << " " << setw(5)
-       << M * N * K * flopsPerCell / bestTime * 1e-9 << " " << setw(5)
-       << (K * N + K * M) * sizeof(dtype) / bestTime * 1e-9 << "\n";
+       << bestTime << " " << setw(5) << flops << " " << setw(5) << bw << "\n";
   cout.flush();
 
   deInitMatmul();
