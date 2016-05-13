@@ -1,14 +1,14 @@
-#include <iostream>
-#include <cstdlib>
-#include <sys/time.h>
-#include <iomanip>
-#include <algorithm>
-#include <vector>
 #include <cuda_runtime.h>
 #include <omp.h>
-#include <random>
+#include <sys/time.h>
+#include <algorithm>
 #include <complex>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <random>
 #include <string>
+#include <vector>
 
 #include "tsmm.cuh"
 
@@ -49,8 +49,7 @@ string mode = "float real";
 typedef double htype;
 typedef double dtype;
 dtype makeDtype(htype v) { return v; }
-#define RAND_HTYPE(gen) 1
-// htype(gen)
+#define RAND_HTYPE(gen) htype(gen)
 #define MAKE_DTYPE(v1, v2) double(v1)
 string mode = "double real";
 
@@ -94,7 +93,7 @@ void printMatrix(const vector<htype> &m1, const vector<htype> &m2, size_t N,
                  size_t K, size_t ldc, size_t position = 0,
                  string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  const size_t range = 5;
+  const size_t range = 10;
   size_t k = position < range ? 0 : position - range;
   cout << " - " << k << " - \n";
 
@@ -112,6 +111,9 @@ void printMatrix(const vector<htype> &m1, const vector<htype> &m2, size_t N,
   cout << " - " << k << " - \n";
 }
 
+vector<default_random_engine> engs;
+vector<uniform_int_distribution<int>> diss;
+
 bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
                 size_t blockCount, bool self) {
   dtype *A, *B, *C;
@@ -121,6 +123,11 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
 
   dtype dalpha = makeDtype(halpha);
   dtype dbeta = makeDtype(hbeta);
+
+  if (!tsmm<dtype, PARM, PARN>(blockCount, 0, dalpha, NULL, 0, NULL, 0, dbeta,
+                               NULL, 0)) {
+    return false;
+  }
 
   cout.flush();
   GPU_ERROR(cudaMalloc(&A, sizeof(dtype) * lda * K));
@@ -134,20 +141,32 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
 
 #pragma omp parallel
   {
-    random_device r;
-    default_random_engine gen(r());
-    uniform_int_distribution<int> dis(-2, 2);
+#pragma omp single
+    {
+      if (omp_get_num_threads() > (int)engs.size()) {
+        random_device r;
+        for (int tid = 0; tid < omp_get_num_threads(); tid++) {
+          engs.push_back(default_random_engine(r()));
+          diss.push_back(uniform_int_distribution<int>(-2, 2));
+        }
+      }
+    }
+
+#pragma omp barrier
+
+    int tid = omp_get_thread_num();
+
 #pragma omp for
     for (size_t i = 0; i < lda * K; i++) {
-      hA[i] =  RAND_HTYPE(dis(gen));
+      hA[i] = RAND_HTYPE(diss[tid](engs[tid]));
     }
 #pragma omp for
     for (size_t i = 0; i < ldb * M; i++) {
-      hB[i] =  RAND_HTYPE(dis(gen));
+      hB[i] = RAND_HTYPE(diss[tid](engs[tid]));
     }
 #pragma omp for
     for (size_t i = 0; i < ldc * K; i++) {
-      hC[i] = cpuC[i] =  RAND_HTYPE(dis(gen));
+      hC[i] = cpuC[i] = RAND_HTYPE(diss[tid](engs[tid]));
     }
   }
   GPU_ERROR(
@@ -157,11 +176,7 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
   GPU_ERROR(
       cudaMemcpy(C, hC.data(), sizeof(htype) * ldc * K, cudaMemcpyDefault));
 
-  if (!tsmm<dtype, PARM, PARN>(blockCount, K, dalpha, A, lda, B, ldb, dbeta, C,
-                               ldc)) {
-    cerr << "Parameters not implemented\n";
-    return false;
-  }
+  tsmm<dtype, PARM, PARN>(blockCount, K, dalpha, A, lda, B, ldb, dbeta, C, ldc);
 
   GPU_ERROR(
       cudaMemcpy(hC.data(), C, sizeof(htype) * ldc * K, cudaMemcpyDefault));
@@ -220,10 +235,16 @@ int main(int argc, char **argv) {
       size_t ldc = N + dis(gen);
 
       passed &= testMatmul(M, N, K, lda, ldb, ldc, blockCount, false);
-      cout << ".";
+      if (passed)
+        cout << ".";
+      else
+        cout << "x";
       cout.flush();
     }
   }
-  if (passed) cout << "\e[32m Passed \e[0m\n";
+  if (passed)
+    cout << "\e[32m Passed \e[0m\n";
+  else
+    cout << "\e[31m Failed \e[0m\n";
   cout.flush();
 }
