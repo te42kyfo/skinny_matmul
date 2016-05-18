@@ -1,14 +1,14 @@
-#include <iostream>
-#include <cstdlib>
-#include <sys/time.h>
-#include <iomanip>
-#include <algorithm>
-#include <vector>
 #include <cuda_runtime.h>
+#include <sys/time.h>
+#include <algorithm>
 #include <complex>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <vector>
 
-#include "tsmm.cuh"
 #include "cu_complex.h"
+#include "tsmm.cuh"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -111,8 +111,8 @@ double measureMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
   bool passed = true;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    passed = tsmm<dtype, PARM, PARN>(blockCount, K, makeDtype(1.0), A, lda, B,
-                                     ldb, makeDtype(1.0), C, ldc);
+    passed = tsmm<dtype, PARM, PARN>(blockCount, K, makeDtype(2.0), A, lda, B,
+                                     ldb, makeDtype(-1.0), C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -139,12 +139,12 @@ int main(int argc, char** argv) {
   initMatmul(M, N, maxK, M, N, N, 8 * 13);
 
   double resultTime = 0;
-  while (resultTime < 0.1 && K * 2 <= maxK) {
+  while (resultTime < 0.04 && K * 2 <= maxK) {
     K *= 2;
     resultTime = measureMatmul(M, N, K, M, N, N, 26, 1);
   }
 
-  int iters = max(1, (int)(0.05 / resultTime));
+  int iters = max(1, (int)(0.03 / resultTime));
 
   size_t lda = M;
   double bestTime = -1;
@@ -155,9 +155,9 @@ int main(int argc, char** argv) {
     for (int t = 0; t < sampleSize; t++) {
       times[t] = measureMatmul(M, N, K, lda, N, N, blockCount, iters);
     }
-    times.erase(remove_if(begin(times), end(times), [](double time) {
-                  return time < 0;
-                }), end(times));
+    times.erase(remove_if(begin(times), end(times),
+                          [](double time) { return time < 0; }),
+                end(times));
     sort(times.begin(), times.end());
 
     if (times.size() != 0 &&
@@ -169,13 +169,15 @@ int main(int argc, char** argv) {
   double flops = 0;
   double bw = 0;
 
+  
   if (bestTime > 0) {
-    flops = M * N * K * flopsPerCell / bestTime * 1e-9;
-    bw = (K * N + K * M) * sizeof(dtype) / bestTime * 1e-9;
+    flops = (M + 2.0) * K * N * flopsPerCell / bestTime * 1.0e-9;
+    bw = (2.0 * N + M) * K * sizeof(double) / bestTime * 1.0e-9;
   }
   cout << setw(3) << M << " " << setw(3) << N << " " << setw(9) << K << "  "
        << setw(10) << bestBlockCount << " " << setprecision(3) << setw(8)
-       << bestTime << " " << setw(5) << flops << " " << setw(5) << bw << "\n";
+       << bestTime << " " << setw(5) << setprecision(3) << flops << " "
+       << setw(5) << bw << "\n";
   cout.flush();
 
   deInitMatmul();

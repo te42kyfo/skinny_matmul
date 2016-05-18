@@ -93,7 +93,7 @@ void printMatrix(const vector<htype> &m1, const vector<htype> &m2, size_t N,
                  size_t K, size_t ldc, size_t position = 0,
                  string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  const size_t range = 10;
+  const size_t range = 5;
   size_t k = position < range ? 0 : position - range;
   cout << " - " << k << " - \n";
 
@@ -111,62 +111,37 @@ void printMatrix(const vector<htype> &m1, const vector<htype> &m2, size_t N,
   cout << " - " << k << " - \n";
 }
 
-vector<default_random_engine> engs;
-vector<uniform_int_distribution<int>> diss;
+vector<htype> hA;
+vector<htype> hB;
+vector<htype> hC;
+vector<htype> cpuC;
+dtype *A, *B, *C;
 
-bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
-                size_t blockCount, bool self) {
-  dtype *A, *B, *C;
-
-  htype halpha = 1.0;
-  htype hbeta = 0.0;
-
-  dtype dalpha = makeDtype(halpha);
-  dtype dbeta = makeDtype(hbeta);
-
-  if (!tsmm<dtype, PARM, PARN>(blockCount, 0, dalpha, NULL, 0, NULL, 0, dbeta,
-                               NULL, 0)) {
-    return false;
-  }
-
-  cout.flush();
+void initMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc) {
+  hA = vector<htype>(lda * K);
+  hB = vector<htype>(ldb * M);
+  hC = vector<htype>(ldc * K);
+  cpuC = vector<htype>(ldc * K);
   GPU_ERROR(cudaMalloc(&A, sizeof(dtype) * lda * K));
   GPU_ERROR(cudaMalloc(&B, sizeof(dtype) * ldb * M));
   GPU_ERROR(cudaMalloc(&C, sizeof(dtype) * ldc * K));
 
-  vector<htype> hA(lda * K);
-  vector<htype> hB(ldb * M);
-  vector<htype> hC(ldc * K, 0);
-  vector<htype> cpuC(ldc * K, 0);
-
 #pragma omp parallel
   {
-#pragma omp single
-    {
-      if (omp_get_num_threads() > (int)engs.size()) {
-        random_device r;
-        for (int tid = 0; tid < omp_get_num_threads(); tid++) {
-          engs.push_back(default_random_engine(r()));
-          diss.push_back(uniform_int_distribution<int>(-2, 2));
-        }
-      }
-    }
-
-#pragma omp barrier
-
-    int tid = omp_get_thread_num();
-
+    random_device r;
+    default_random_engine gen(r());
+    uniform_int_distribution<int> dis(-2, 2);
 #pragma omp for
     for (size_t i = 0; i < lda * K; i++) {
-      hA[i] = RAND_HTYPE(diss[tid](engs[tid]));
+      hA[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldb * M; i++) {
-      hB[i] = RAND_HTYPE(diss[tid](engs[tid]));
+      hB[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
     for (size_t i = 0; i < ldc * K; i++) {
-      hC[i] = cpuC[i] = RAND_HTYPE(diss[tid](engs[tid]));
+      hC[i] = cpuC[i] = RAND_HTYPE(dis(gen));
     }
   }
   GPU_ERROR(
@@ -175,8 +150,21 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
       cudaMemcpy(B, hB.data(), sizeof(htype) * ldb * M, cudaMemcpyDefault));
   GPU_ERROR(
       cudaMemcpy(C, hC.data(), sizeof(htype) * ldc * K, cudaMemcpyDefault));
+  GPU_ERROR(cudaDeviceSynchronize());
+}
 
-  tsmm<dtype, PARM, PARN>(blockCount, K, dalpha, A, lda, B, ldb, dbeta, C, ldc);
+bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
+                size_t blockCount, bool self) {
+  htype halpha = 2.0;
+  htype hbeta = -1.0;
+
+  dtype dalpha = makeDtype(halpha);
+  dtype dbeta = makeDtype(hbeta);
+
+  if (!tsmm<dtype, PARM, PARN>(blockCount, K, dalpha, A, lda, B, ldb, dbeta, C,
+                               ldc)) {
+    return false;
+  }
 
   GPU_ERROR(
       cudaMemcpy(hC.data(), C, sizeof(htype) * ldc * K, cudaMemcpyDefault));
@@ -208,10 +196,6 @@ bool testMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc,
     if (!passed) break;
   }
 
-  GPU_ERROR(cudaFree(A));
-  GPU_ERROR(cudaFree(B));
-  GPU_ERROR(cudaFree(C));
-
   return passed;
 }
 
@@ -228,6 +212,9 @@ int main(int argc, char **argv) {
 
   cout << M << "xKx" << N << "  " << mode << " ";
   bool passed = true;
+
+  initMatmul(M, N, K, M + 4, N + 4, N + 4);
+
   for (size_t blockCount = 2 * 13; blockCount <= 8 * 13; blockCount += 2 * 13) {
     for (int t = 0; t < sampleSize; t++) {
       size_t lda = M + dis(gen);
