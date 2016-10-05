@@ -9,6 +9,7 @@ bool tsmm_fix_blend(const int blockCount, const int varM, const int varN,
                     const int K, const T *A, const int lda, const T alpha,
                     const T *B, const int ldb, const T beta, T *C,
                     const int ldc) {
+  if (blockCount == 0) return true;
   if (M >= 7 && N >= 4 && tsmm_fix1<T, M, N>(blockCount, varM, varN, K, A, lda,
                                              alpha, B, ldb, beta, C, ldc))
     return true;
