@@ -1,5 +1,5 @@
 #pragma once
-#include "cu_complex.cuh"
+#include "cu_complex.h"
 
 template <typename T>
 bool eq(const T lhs, const T rhs) {
