@@ -76,8 +76,6 @@ double dtime() {
   return tseconds;
 }
 
-
-
 void printMatrix(const vector<htype>& m1, const vector<htype>& m2, size_t N,
                  size_t K, size_t ldc, size_t position = 0,
                  string matchColor = "\e[32m",
@@ -203,13 +201,14 @@ bool testMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N, size_t K,
              << ") ";
         cout << "\e[31mMismatch\e[0m at " << k << ", " << n << "; "
              << hC_test[k * ldc + n] << " != " << hC_reference[k * ldc + n]
-             << "\n";
-
+             << " ";
+#ifdef VERBOSE_ERRORS
         printMatrix(hC_test, hC_reference, N, K, ldc, k);
-        cout << "--\n";
+        cout << "\n--\n";
         printMatrix(hC_reference, hC_reference, N, K, ldc, k, "\e[0m");
         cout << "--\n\n";
         cout << K << " Rows\n";
+#endif
         passed = false;
         break;
       }
