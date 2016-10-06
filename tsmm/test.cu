@@ -168,7 +168,7 @@ void deInitMatmul() {
 
 bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
                  size_t K, int lda, int ldb, int ldc, size_t blockCount,
-                 bool self, vector<htype>& resultDest) {
+                 bool self, htype beta, vector<htype>& resultDest) {
   GPU_ERROR(
       cudaMemcpy(A_dirty, A_clean, sizeof(htype) * lda * K, cudaMemcpyDefault));
   GPU_ERROR(
@@ -176,7 +176,7 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
   GPU_ERROR(
       cudaMemcpy(C_dirty, C_clean, sizeof(htype) * ldc * K, cudaMemcpyDefault));
   dtype dalpha = makeDtype(2.0);
-  dtype dbeta = makeDtype(-1.0);
+  dtype dbeta = makeDtype(beta);
   bool result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha,
                                B_dirty, ldb, dbeta, C_dirty, ldc);
   GPU_ERROR(cudaMemcpy(resultDest.data(), C_dirty, sizeof(htype) * ldc * K,
@@ -185,14 +185,15 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
 }
 
 bool testMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N, size_t K,
-                int lda, int ldb, int ldc, size_t blockCount, bool self) {
+                int lda, int ldb, int ldc, size_t blockCount, bool self,
+                htype beta) {
   // matmulFunction does not support parameters, this is a pass
   if (!cleanMatmul(matmulFunction, M, N, K, lda, ldb, ldc, blockCount, self,
-                   hC_test))
+                   beta, hC_test))
     return true;
   GPU_ERROR(cudaDeviceSynchronize());
   cleanMatmul(tsmm_cublas<dtype>, M, N, K, lda, ldb, ldc, blockCount, self,
-              hC_reference);
+              beta, hC_reference);
   GPU_ERROR(cudaDeviceSynchronize());
 
   bool passed = true;
@@ -300,7 +301,7 @@ int main(int argc, char** argv) {
             size_t ldc = N + dis(gen);
             size_t K = maxK / (lda + ldc);
             passed &= testMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
-                                 blockCount, false);
+                                 blockCount, false, 0.0);
 
             if (passed)
               cout << ".";
