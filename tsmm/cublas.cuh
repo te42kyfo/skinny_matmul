@@ -2,6 +2,13 @@
 #include <cublas_v2.h>
 #include <typeinfo>
 #include "../eq.cuh"
+#include "../gpu_error.cuh"
+
+struct scopedCuMemDelete {
+  void *_ptr;
+  scopedCuMemDelete(void *ptr) : _ptr(ptr) {}
+  ~scopedCuMemDelete() { GPU_ERROR(cudaFree(_ptr)); }
+};
 
 cublasHandle_t cublas_handle;
 bool cublas_handle_initialized = false;
@@ -13,6 +20,14 @@ bool tsmm_cublas(const int blockCount, const int M, const int N, const int K,
   if (!cublas_handle_initialized) {
     cublasCreate(&cublas_handle);
     cublas_handle_initialized = true;
+  }
+
+  scopedCuMemDelete A_scopedDeleter(0);
+  if (A == C) {
+    GPU_ERROR(cudaMalloc(&A_scopedDeleter._ptr, sizeof(T) * lda * K));
+    GPU_ERROR(cudaMemcpy(A_scopedDeleter._ptr, C, sizeof(T) * lda * K,
+                         cudaMemcpyDefault));
+    A = (T *)A_scopedDeleter._ptr;
   }
 
   cublasStatus_t status;
@@ -43,4 +58,3 @@ bool tsmm_cublas(const int blockCount, const int M, const int N, const int K,
   }
   return true;
 }
-
