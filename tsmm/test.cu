@@ -278,7 +278,7 @@ int main(int argc, char** argv) {
   default_random_engine gen(r());
   uniform_int_distribution<int> dis(0, 4);
 
-  int sampleSize = 5;
+  int sampleSize = 4;
 
   for (int M = m1; M <= m2; M++) {
     for (int N = n1; N <= n2; N++) {
@@ -293,21 +293,22 @@ int main(int argc, char** argv) {
         }
         bool passed = true;
 
-        for (int t = 0; t < sampleSize; t++) {
-          for (int blockCount = 1 * 13; blockCount <= 8 * 13;
-               blockCount += 13) {
-            size_t lda = M + dis(gen);
-            size_t ldb = N + dis(gen);
-            size_t ldc = N + dis(gen);
-            size_t K = maxK / (lda + ldc);
-            passed &= testMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
-                                 blockCount, false, 0.0);
-
-            if (passed)
-              cout << ".";
-            else
-              cout << "x";
-            cout.flush();
+        for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
+          for (int t = 0; t < sampleSize; t++) {
+            for (int blockCount = 1 * 13; blockCount <= 8 * 13;
+                 blockCount += 13) {
+              size_t lda = M + dis(gen);
+              size_t ldb = N + dis(gen);
+              size_t ldc = N + dis(gen);
+              size_t K = maxK / (lda + ldc);
+              passed &= testMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
+                                   blockCount, false, beta);
+              if (passed)
+                cout << ".";
+              else
+                cout << "x";
+              cout.flush();
+            }
           }
         }
         if (passed)
