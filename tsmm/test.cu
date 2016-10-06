@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../cu_complex.h"
+#include "../gpu_error.cuh"
 #include "cublas.cuh"
 #include "fix1.cuh"
 #include "fix2.cuh"
@@ -75,16 +76,7 @@ double dtime() {
   return tseconds;
 }
 
-#define GPU_ERROR(ans) \
-  { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char* file, int line,
-                      bool abort = true) {
-  if (code != cudaSuccess) {
-    cerr << "GPUassert: \"" << cudaGetErrorString(code) << "\"  in " << file
-         << ": " << line << "\n";
-    if (abort) exit(code);
-  }
-}
+
 
 void printMatrix(const vector<htype>& m1, const vector<htype>& m2, size_t N,
                  size_t K, size_t ldc, size_t position = 0,
@@ -177,8 +169,14 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
       cudaMemcpy(C_dirty, C_clean, sizeof(htype) * ldc * K, cudaMemcpyDefault));
   dtype dalpha = makeDtype(2.0);
   dtype dbeta = makeDtype(beta);
-  bool result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha,
-                               B_dirty, ldb, dbeta, C_dirty, ldc);
+  bool result;
+  if (self) {
+    result = matmulFunction(blockCount, M, N, K, C_dirty, ldc, dalpha, B_dirty,
+                            ldb, dbeta, C_dirty, ldc);
+  } else {
+    result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, B_dirty,
+                            ldb, dbeta, C_dirty, ldc);
+  }
   GPU_ERROR(cudaMemcpy(resultDest.data(), C_dirty, sizeof(htype) * ldc * K,
                        cudaMemcpyDefault));
   return result;
@@ -278,7 +276,7 @@ int main(int argc, char** argv) {
   default_random_engine gen(r());
   uniform_int_distribution<int> dis(0, 4);
 
-  int sampleSize = 4;
+  int sampleSize = 2;
 
   for (int M = m1; M <= m2; M++) {
     for (int N = n1; N <= n2; N++) {
@@ -293,21 +291,24 @@ int main(int argc, char** argv) {
         }
         bool passed = true;
 
-        for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
-          for (int t = 0; t < sampleSize; t++) {
-            for (int blockCount = 1 * 13; blockCount <= 8 * 13;
-                 blockCount += 13) {
-              size_t lda = M + dis(gen);
-              size_t ldb = N + dis(gen);
-              size_t ldc = N + dis(gen);
-              size_t K = maxK / (lda + ldc);
-              passed &= testMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
-                                   blockCount, false, beta);
-              if (passed)
-                cout << ".";
-              else
-                cout << "x";
-              cout.flush();
+        for (int self = 0; self <= (M == N) ? 1 : 0; self++) {
+          for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
+            for (int t = 0; t < sampleSize; t++) {
+              for (int blockCount = 1 * 13; blockCount <= 8 * 13;
+                   blockCount += 13) {
+                size_t lda = M + dis(gen);
+                size_t ldb = N + dis(gen);
+                size_t ldc = N + dis(gen);
+                size_t K = maxK / (lda + ldc);
+                bool result = testMatmul(matmulVersion.first, M, N, K, lda, ldb,
+                                         ldc, blockCount, (self == 1), beta);
+                if (result)
+                  cout << ".";
+                else
+                  cout << "x";
+                passed &= result;
+                cout.flush();
+              }
             }
           }
         }
