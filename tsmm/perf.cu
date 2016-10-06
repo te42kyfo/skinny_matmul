@@ -64,6 +64,16 @@ int flopsPerCell = 2;
 
 #endif
 
+#ifdef ZEROBETA
+bool zeroBetaMode = true;
+htype beta = 0.0;
+string betaMode = "BETA=0";
+#else
+bool zeroBetaMode = false;
+htype beta = -1.0;
+string betaMode = "BETA=1";
+#endif
+
 using MatmulFunctionType = function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
     const dtype, const dtype*, const int, const dtype, dtype*, const int)>;
@@ -75,7 +85,6 @@ double dtime() {
   tseconds = (double)t.tv_sec + (double)t.tv_usec * 1.0e-6;
   return tseconds;
 }
-
 
 __global__ void initKernel(dtype* A, size_t N) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -114,7 +123,7 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
     passed = matmulFunction(blockCount, M, N, K, A, lda, makeDtype(2.0), B, ldb,
-                            makeDtype(-1.0), C, ldc);
+                            makeDtype(beta), C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -227,10 +236,12 @@ int main(int argc, char** argv) {
         double bw = 0;
 
         if (bestTime > 0) {
-          flops = (M + 2.0) * K * N * flopsPerCell / bestTime * 1.0e-9;
-          bw = (2.0 * N + M) * K * sizeof(double) / bestTime * 1.0e-9;
+          flops = (M + (zeroBetaMode ? 0 : 2)) * K * N * flopsPerCell /
+                  bestTime * 1.0e-9;
+          bw = ((zeroBetaMode ? 1.0 : 2.0) * N + M) * K * sizeof(double) /
+               bestTime * 1.0e-9;
         }
-        cout << setw(3) << M << " " << setw(3) << N << " "
+        cout << setw(3) << M << " " << setw(3) << N << " " << betaMode << " "
              << matmulVersion.second << " " << setw(9) << K << "  " << setw(10)
              << bestBlockCount << " " << setprecision(3) << setw(8) << bestTime
              << " " << setw(5) << setprecision(3) << flops << " " << setw(5)
