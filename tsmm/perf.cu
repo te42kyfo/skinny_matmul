@@ -64,16 +64,6 @@ int flopsPerCell = 2;
 
 #endif
 
-#ifdef ZEROBETA
-bool zeroBetaMode = true;
-htype beta = 0.0;
-string betaMode = "BETA=0";
-#else
-bool zeroBetaMode = false;
-htype beta = -1.0;
-string betaMode = "BETA=1";
-#endif
-
 using MatmulFunctionType = function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
     const dtype, const dtype*, const int, const dtype, dtype*, const int)>;
@@ -116,14 +106,18 @@ void deInitMatmul() {
 
 double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
                      size_t K, int lda, int ldb, int ldc, size_t blockCount,
-                     int iters) {
+                     int iters, bool self, dtype beta) {
   GPU_ERROR(cudaDeviceSynchronize());
 
   bool passed = true;
   double t1 = dtime();
   for (int iter = 0; iter < iters; iter++) {
-    passed = matmulFunction(blockCount, M, N, K, A, lda, makeDtype(2.0), B, ldb,
-                            makeDtype(beta), C, ldc);
+    if (self)
+      passed = matmulFunction(blockCount, M, N, K, C, ldc, makeDtype(2.0), B,
+                              ldb, makeDtype(beta), C, ldc);
+    else
+      passed = matmulFunction(blockCount, M, N, K, A, lda, makeDtype(2.0), B,
+                              ldb, makeDtype(beta), C, ldc);
   }
   GPU_ERROR(cudaDeviceSynchronize());
   double t2 = dtime();
@@ -136,6 +130,10 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
 }
 
 int main(int argc, char** argv) {
+  if (PARM == 0 || PARN == 0) {
+    std::cout << "  M   N  name       K  blockcount     time  GFlop  GByte\n";
+    return 0;
+  }
   int m1 = 0;
   int m2 = 0;
   int n1 = 0;
@@ -190,63 +188,66 @@ int main(int argc, char** argv) {
     for (int N = n1; N <= n2; N++) {
       if (n1 == 0 && n2 == 0) N = M;
 
-      if (M == 0 || N == 0) {
-        std::cout
-            << "  M   N  name       K  blockcount     time  GFlop  GByte\n";
-        return 0;
-      }
       size_t maxK = 2 * ((size_t)1 << 30) / ((M + N) * 8);
       size_t K = 200;
 
       // One warmup call
-      measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1);
+      measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1, true, -1.0);
       double resultTime =
-          measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1);
+          measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1, true, -1.0);
 
       while (resultTime < 0.005 && K < maxK) {
         K = min(maxK, 2 * K);
-        resultTime = measureMatmul(versions[0].first, M, N, K, M, N, N, 26, 1);
+        resultTime = measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1,
+                                   true, -1.0);
       }
 
       for (const auto& matmulVersion : versions) {
-        int iters = 1;
+        for (int self = 0; self <= (M == N) ? 1 : 0; self++) {
+          for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
+            int iters = 1;
 
-        size_t lda = M;
-        double bestTime = -1;
-        int bestBlockCount = 0;
-        for (int blockCount = 1 * 13; blockCount <= 8 * 13; blockCount += 13) {
-          int sampleSize = 3;
-          vector<double> times(sampleSize);
-          for (int t = 0; t < sampleSize; t++) {
-            times[t] = measureMatmul(matmulVersion.first, M, N, K, lda, N, N,
-                                     blockCount, iters);
-          }
-          times.erase(remove_if(begin(times), end(times),
-                                [](double time) { return time < 0; }),
-                      end(times));
-          sort(times.begin(), times.end());
+            size_t lda = M;
+            double bestTime = -1;
+            int bestBlockCount = 0;
+            for (int blockCount = 1 * 13; blockCount <= 8 * 13;
+                 blockCount += 13) {
+              int sampleSize = 3;
+              vector<double> times(sampleSize);
+              for (int t = 0; t < sampleSize; t++) {
+                times[t] =
+                    measureMatmul(matmulVersion.first, M, N, K, lda, N, N,
+                                  blockCount, iters, (self == 1), beta);
+              }
+              times.erase(remove_if(begin(times), end(times),
+                                    [](double time) { return time < 0; }),
+                          end(times));
+              sort(times.begin(), times.end());
 
-          if (times.size() != 0 &&
-              (times[sampleSize / 2] < bestTime || bestBlockCount == 0)) {
-            bestTime = times[sampleSize / 2];
-            bestBlockCount = blockCount;
+              if (times.size() != 0 &&
+                  (times[sampleSize / 2] < bestTime || bestBlockCount == 0)) {
+                bestTime = times[sampleSize / 2];
+                bestBlockCount = blockCount;
+              }
+            }
+            double flops = 0;
+            double bw = 0;
+
+            if (bestTime > 0) {
+              flops = (M + (beta == 0 ? 0 : 1)) * K * N * flopsPerCell /
+                      bestTime * 1.0e-9;
+              bw = ((beta == 0 || self == 1 ? 1.0 : 2.0) * N + M) * K *
+                   sizeof(double) / bestTime * 1.0e-9;
+            }
+            cout << setw(3) << M << " " << setw(3) << N << " " << beta << " "
+                 << (self == 1 ? "A*A" : "A*B") << " " << matmulVersion.second
+                 << " " << setw(9) << K << "  " << setw(10) << bestBlockCount
+                 << " " << setprecision(3) << setw(8) << bestTime << " "
+                 << setw(5) << setprecision(3) << flops << " " << setw(5) << bw
+                 << "\n";
+            cout.flush();
           }
         }
-        double flops = 0;
-        double bw = 0;
-
-        if (bestTime > 0) {
-          flops = (M + (zeroBetaMode ? 0 : 2)) * K * N * flopsPerCell /
-                  bestTime * 1.0e-9;
-          bw = ((zeroBetaMode ? 1.0 : 2.0) * N + M) * K * sizeof(double) /
-               bestTime * 1.0e-9;
-        }
-        cout << setw(3) << M << " " << setw(3) << N << " " << betaMode << " "
-             << matmulVersion.second << " " << setw(9) << K << "  " << setw(10)
-             << bestBlockCount << " " << setprecision(3) << setw(8) << bestTime
-             << " " << setw(5) << setprecision(3) << flops << " " << setw(5)
-             << bw << "\n";
-        cout.flush();
       }
       if (versions.size() > 1) cout << "\n";
     }
