@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../cu_complex.h"
+#include "../gpu_error.cuh"
 #include "cublas.cuh"
 #include "fix1.cuh"
 #include "fix2.cuh"
@@ -75,16 +76,6 @@ double dtime() {
   return tseconds;
 }
 
-#define GPU_ERROR(ans) \
-  { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char* file, int line,
-                      bool abort = true) {
-  if (code != cudaSuccess) {
-    cerr << "GPUassert: \"" << cudaGetErrorString(code) << "\"  in " << file
-         << ": " << line << "\n";
-    if (abort) exit(code);
-  }
-}
 
 __global__ void initKernel(dtype* A, size_t N) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
