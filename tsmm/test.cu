@@ -15,6 +15,7 @@
 #include "fix2.cuh"
 #include "fix_blend.cuh"
 #include "fix_fb.cuh"
+#include "fix_ip_ghost.cuh"
 #include "var1.cuh"
 
 #if !defined PARM || !defined PARN
@@ -198,11 +199,13 @@ bool testMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N, size_t K,
     for (size_t n = 0; n < N; n++) {
       if (hC_test[k * ldc + n] != hC_reference[k * ldc + n]) {
         cout << "\n( " << blockCount << " blocks, " << ((self) ? "A*A" : "A*B")
-             << ") ";
+             << ", beta=" << beta << ", lda=" << lda << ", ldb=" << ldb
+             << ", ldc=" << ldc << ") ";
         cout << "\e[31mMismatch\e[0m at " << k << ", " << n << "; "
              << hC_test[k * ldc + n] << " != " << hC_reference[k * ldc + n]
              << " ";
 #ifdef VERBOSE_ERRORS
+        cout << "\n";
         printMatrix(hC_test, hC_reference, N, K, ldc, k);
         cout << "\n--\n";
         printMatrix(hC_reference, hC_reference, N, K, ldc, k, "\e[0m");
@@ -266,6 +269,10 @@ int main(int argc, char** argv) {
 #ifdef VAR1
   versions.push_back({tsmm_var1<dtype>, "VAR_V1"});
 #endif
+#ifdef FIXIPG
+  versions.push_back({tsmm_fix_ip_ghost<dtype, PARM, PARN>, "FIXIPG"});
+#endif
+
 #endif
 
   int maxK = 0.05 * ((size_t)1 << 30) / (2 * sizeof(dtype));
@@ -283,8 +290,8 @@ int main(int argc, char** argv) {
       for (const auto& matmulVersion : versions) {
         cout << M << "xKx" << N << "  " << matmulVersion.second << " " << mode
              << " ";
-        if (!matmulVersion.first(0, M, N, 0, NULL, M, makeDtype(1.0), NULL, N,
-                                 makeDtype(1.0), NULL, M)) {
+        if (!matmulVersion.first(0, M, N, 0, A_dirty, M, makeDtype(1.0),
+                                 B_dirty, N, makeDtype(1.0), C_dirty, M)) {
           cout << "\e[35m Skipped \e[0m\n";
           continue;
         }
@@ -296,7 +303,7 @@ int main(int argc, char** argv) {
               for (int blockCount = 1 * 13; blockCount <= 8 * 13;
                    blockCount += 13) {
                 size_t lda = M + dis(gen);
-                size_t ldb = N + dis(gen);
+                size_t ldb = M + dis(gen);
                 size_t ldc = N + dis(gen);
                 size_t K = maxK / (lda + ldc);
                 bool result = testMatmul(matmulVersion.first, M, N, K, lda, ldb,
