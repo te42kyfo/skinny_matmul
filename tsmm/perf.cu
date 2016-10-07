@@ -16,6 +16,7 @@
 #include "fix_blend.cuh"
 #include "fix_fb.cuh"
 #include "var1.cuh"
+#include "fix_ip_ghost.cuh"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -179,6 +180,9 @@ int main(int argc, char** argv) {
 #endif
 #ifdef VAR1
   versions.push_back({tsmm_var1<dtype>, "VAR_V1"});
+#endif
+#ifdef FIXIPG
+  versions.push_back({tsmm_fix_ip_ghost<dtype, PARM, PARN>, "FIXIPG"});
 #endif
 #endif
 
