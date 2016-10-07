@@ -15,7 +15,7 @@ static __global__ void tsmm_var1_kernel(const T *A, const T *B, T *out,
     T sum;
     zero(sum);
     for (int m = 0; m < M; m++) {
-      sum = axpy(sum, A[row * lda + m], __ldg(B + m * ldb + n));
+      sum = axpy(sum, A[row * lda + m], __ldg(B + n * ldb + m));
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum);
@@ -29,6 +29,7 @@ template <typename T>
 bool tsmm_var1(const size_t blockCount, const int varM, const int varN,
                const int K, const T *A, const int lda, const T alpha,
                const T *B, const int ldb, const T beta, T *C, const int ldc) {
+  if (A == C) return false;
   if (blockCount == 0) return true;
   const int BLOCKSIZE = 256;
 
