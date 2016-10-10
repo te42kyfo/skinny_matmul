@@ -15,8 +15,8 @@
 #include "fix2.cuh"
 #include "fix_blend.cuh"
 #include "fix_fb.cuh"
-#include "var1.cuh"
 #include "fix_ip_ghost.cuh"
+#include "var1.cuh"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -92,10 +92,10 @@ dtype* C;
 void initMatmul(int M, int N, int K, int lda, int ldb, int ldc,
                 size_t blockCount) {
   GPU_ERROR(cudaMalloc(&A, sizeof(dtype) * lda * K));
-  GPU_ERROR(cudaMalloc(&B, sizeof(dtype) * ldb * M));
+  GPU_ERROR(cudaMalloc(&B, sizeof(dtype) * ldb * N));
   GPU_ERROR(cudaMalloc(&C, sizeof(dtype) * ldc * K));
   initKernel<<<52, 256>>>(A, lda * K);
-  initKernel<<<52, 256>>>(B, ldb * M);
+  initKernel<<<52, 256>>>(B, ldb * N);
   initKernel<<<52, 256>>>(C, ldc * K);
 }
 
@@ -163,8 +163,14 @@ int main(int argc, char** argv) {
   vector<pair<MatmulFunctionType, string>> versions;
 
 #if PARM != 0 && PARN != 0
+#ifdef CUBLAS
+  versions.push_back({tsmm_cublas<dtype>, "CUBLAS"});
+#endif
 #ifdef FIX_BLEND
   versions.push_back({tsmm_fix_blend<dtype, PARM, PARN>, "FBLEND"});
+#endif
+#ifdef VAR1
+  versions.push_back({tsmm_var1<dtype>, "VAR_V1"});
 #endif
 #ifdef FIX_FB
   versions.push_back({tsmm_fix_fb<dtype, PARM, PARN>, "FIX_FB"});
@@ -174,12 +180,6 @@ int main(int argc, char** argv) {
 #endif
 #ifdef FIX2
   versions.push_back({tsmm_fix2<dtype, PARM, PARN>, "FIX_V2"});
-#endif
-#ifdef CUBLAS
-  versions.push_back({tsmm_cublas<dtype>, "CUBLAS"});
-#endif
-#ifdef VAR1
-  versions.push_back({tsmm_var1<dtype>, "VAR_V1"});
 #endif
 #ifdef FIXIPG
   versions.push_back({tsmm_fix_ip_ghost<dtype, PARM, PARN>, "FIXIPG"});
@@ -196,14 +196,18 @@ int main(int argc, char** argv) {
       size_t K = 200;
 
       // One warmup call
-      measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1, true, -1.0);
-      double resultTime =
-          measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1, true, -1.0);
+      measureMatmul(versions[0].first, M, N, K, M, M, N, 13, 1, false, -1.0);
+      double resultTime = measureMatmul(versions[0].first, M, N, K, M, M, N, 13,
+                                        1, false, -1.0);
 
       while (resultTime < 0.005 && K < maxK) {
         K = min(maxK, 2 * K);
-        resultTime = measureMatmul(versions[0].first, M, N, K, M, N, N, 13, 1,
-                                   true, -1.0);
+        resultTime = measureMatmul(versions[0].first, M, N, K, M, M, N, 13, 1,
+                                   false, -1.0);
+      }
+      if (resultTime < 0) {
+        cout << "Reference Kernel does not work\n";
+        exit(1);
       }
 
       for (const auto& matmulVersion : versions) {
@@ -211,7 +215,6 @@ int main(int argc, char** argv) {
           for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
             int iters = 1;
 
-            size_t lda = M;
             double bestTime = -1;
             int bestBlockCount = 0;
             for (int blockCount = 1 * 13; blockCount <= 8 * 13;
@@ -219,9 +222,8 @@ int main(int argc, char** argv) {
               int sampleSize = 3;
               vector<double> times(sampleSize);
               for (int t = 0; t < sampleSize; t++) {
-                times[t] =
-                    measureMatmul(matmulVersion.first, M, N, K, lda, N, N,
-                                  blockCount, iters, (self == 1), beta);
+                times[t] = measureMatmul(matmulVersion.first, M, N, K, M, M, N,
+                                         blockCount, iters, (self == 1), beta);
               }
               times.erase(remove_if(begin(times), end(times),
                                     [](double time) { return time < 0; }),
