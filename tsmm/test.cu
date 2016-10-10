@@ -110,15 +110,15 @@ dtype *A_dirty, *B_dirty, *C_dirty;
 
 void initMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc) {
   hA = vector<htype>(lda * K);
-  hB = vector<htype>(ldb * M);
+  hB = vector<htype>(ldb * N);
   hC = vector<htype>(ldc * K);
   hC_test = vector<htype>(ldc * K);
   hC_reference = vector<htype>(ldc * K);
   GPU_ERROR(cudaMalloc(&A_clean, sizeof(dtype) * lda * K));
-  GPU_ERROR(cudaMalloc(&B_clean, sizeof(dtype) * ldb * M));
+  GPU_ERROR(cudaMalloc(&B_clean, sizeof(dtype) * ldb * N));
   GPU_ERROR(cudaMalloc(&C_clean, sizeof(dtype) * ldc * K));
   GPU_ERROR(cudaMalloc(&A_dirty, sizeof(dtype) * lda * K));
-  GPU_ERROR(cudaMalloc(&B_dirty, sizeof(dtype) * ldb * M));
+  GPU_ERROR(cudaMalloc(&B_dirty, sizeof(dtype) * ldb * N));
   GPU_ERROR(cudaMalloc(&C_dirty, sizeof(dtype) * ldc * K));
 
 #pragma omp parallel
@@ -131,7 +131,7 @@ void initMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc) {
       hA[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
-    for (size_t i = 0; i < ldb * M; i++) {
+    for (size_t i = 0; i < ldb * N; i++) {
       hB[i] = RAND_HTYPE(dis(gen));
     }
 #pragma omp for
@@ -141,7 +141,7 @@ void initMatmul(size_t M, size_t N, size_t K, int lda, int ldb, int ldc) {
   }
   GPU_ERROR(cudaMemcpy(A_clean, hA.data(), sizeof(htype) * lda * K,
                        cudaMemcpyDefault));
-  GPU_ERROR(cudaMemcpy(B_clean, hB.data(), sizeof(htype) * ldb * M,
+  GPU_ERROR(cudaMemcpy(B_clean, hB.data(), sizeof(htype) * ldb * N,
                        cudaMemcpyDefault));
   GPU_ERROR(cudaMemcpy(C_clean, hC.data(), sizeof(htype) * ldc * K,
                        cudaMemcpyDefault));
@@ -163,7 +163,7 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
   GPU_ERROR(
       cudaMemcpy(A_dirty, A_clean, sizeof(htype) * lda * K, cudaMemcpyDefault));
   GPU_ERROR(
-      cudaMemcpy(B_dirty, B_clean, sizeof(htype) * ldb * M, cudaMemcpyDefault));
+      cudaMemcpy(B_dirty, B_clean, sizeof(htype) * ldb * N, cudaMemcpyDefault));
   GPU_ERROR(
       cudaMemcpy(C_dirty, C_clean, sizeof(htype) * ldc * K, cudaMemcpyDefault));
   dtype dalpha = makeDtype(2.0);
@@ -181,13 +181,16 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
   return result;
 }
 
-bool testMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N, size_t K,
-                int lda, int ldb, int ldc, size_t blockCount, bool self,
-                htype beta) {
+enum class TESTRESULT { PASS, SKIP, FAIL };
+
+TESTRESULT testMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
+                      size_t K, int lda, int ldb, int ldc, size_t blockCount,
+                      bool self, htype beta) {
   // matmulFunction does not support parameters, this is a pass
   if (!cleanMatmul(matmulFunction, M, N, K, lda, ldb, ldc, blockCount, self,
                    beta, hC_test))
-    return true;
+    return TESTRESULT::SKIP;
+
   GPU_ERROR(cudaDeviceSynchronize());
   cleanMatmul(tsmm_cublas<dtype>, M, N, K, lda, ldb, ldc, blockCount, self,
               beta, hC_reference);
@@ -219,7 +222,10 @@ bool testMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N, size_t K,
     if (!passed) break;
   }
 
-  return passed;
+  if (passed)
+    return TESTRESULT::PASS;
+  else
+    return TESTRESULT::FAIL;
 }
 
 int main(int argc, char** argv) {
@@ -290,11 +296,6 @@ int main(int argc, char** argv) {
       for (const auto& matmulVersion : versions) {
         cout << M << "xKx" << N << "  " << matmulVersion.second << " " << mode
              << " ";
-        if (!matmulVersion.first(0, M, N, 0, A_dirty, M, makeDtype(1.0),
-                                 B_dirty, N, makeDtype(1.0), C_dirty, M)) {
-          cout << "\e[35m Skipped \e[0m\n";
-          continue;
-        }
         bool passed = true;
 
         for (int self = 0; self <= (M == N) ? 1 : 0; self++) {
@@ -306,13 +307,20 @@ int main(int argc, char** argv) {
                 size_t ldb = M + dis(gen);
                 size_t ldc = N + dis(gen);
                 size_t K = maxK / (lda + ldc);
-                bool result = testMatmul(matmulVersion.first, M, N, K, lda, ldb,
+                auto result = testMatmul(matmulVersion.first, M, N, K, lda, ldb,
                                          ldc, blockCount, (self == 1), beta);
-                if (result)
-                  cout << ".";
-                else
-                  cout << "x";
-                passed &= result;
+                if (result == TESTRESULT::PASS) {
+                  cout << "\e[32m#\e[0m";
+                  passed &= true;
+                }
+                if (result == TESTRESULT::SKIP) {
+                  cout << "\e[35m-\e[0m";
+                  passed &= true;
+                }
+                if (result == TESTRESULT::FAIL) {
+                  cout << "\e[31mX\e[0m";
+                  passed &= false;
+                }
                 cout.flush();
               }
             }
