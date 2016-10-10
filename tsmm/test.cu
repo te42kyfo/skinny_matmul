@@ -298,19 +298,19 @@ int main(int argc, char** argv) {
              << " ";
         bool passed = true;
 
-        for (int self = 0; self <= (M == N) ? 1 : 0; self++) {
+        for (int self = 0; self <= 1; self++) {
           for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
             for (int t = 0; t < sampleSize; t++) {
               for (int blockCount = 1 * 13; blockCount <= 8 * 13;
                    blockCount += 13) {
                 size_t lda = M + dis(gen);
                 size_t ldb = M + dis(gen);
-                size_t ldc = N + dis(gen);
+                size_t ldc = (self == 1 ? max(N + dis(gen), M) : N + dis(gen));
                 size_t K = maxK / (lda + ldc);
                 auto result = testMatmul(matmulVersion.first, M, N, K, lda, ldb,
                                          ldc, blockCount, (self == 1), beta);
                 if (result == TESTRESULT::PASS) {
-                  cout << "\e[32m#\e[0m";
+                  cout << "#";
                   passed &= true;
                 }
                 if (result == TESTRESULT::SKIP) {
@@ -327,9 +327,9 @@ int main(int argc, char** argv) {
           }
         }
         if (passed)
-          cout << "\e[32m Passed \e[0m\n";
+          cout << "\e[32m\e[1m Passed \e[0m\n";
         else
-          cout << "\e[31m Failed \e[0m\n";
+          cout << "\e[31m\e[1m Failed \e[0m\n";
       }
       if (versions.size() > 1) cout << "\n";
     }
