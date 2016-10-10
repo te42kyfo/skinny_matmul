@@ -26,7 +26,7 @@ static __global__ void tsmm_fix1_kernel(const T *A, const T *__restrict__ B,
     T sum;
     zero(sum);
     for (int m = 0; m < M; m++) {
-      sum = axpy(sum, rowCache[localRow * M + m], B[m * ldb + n]);
+      sum = axpy(sum, rowCache[localRow * M + m], B[n * ldb + m]);
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum);
