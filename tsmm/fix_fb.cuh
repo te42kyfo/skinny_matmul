@@ -16,7 +16,7 @@ static __global__ void tsmm_fix_fb_kernel(const T *__restrict__ A,
     T sum;
     zero(sum);
     for (int m = 0; m < M; m++) {
-      sum = axpy(sum, A[row * lda + m], B[m * ldb + n]);
+      sum = axpy(sum, A[row * lda + m], B[n * ldb + m]);
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum);
@@ -30,8 +30,8 @@ template <typename T, int M, int N>
 bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
                  const int K, const T *A, const int lda, const T alpha,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
-  if (varM != M || varN != N) return false;
-  if (blockCount == 0) return true;
+  if (varM != M || varN != N || A == C) return false;
+
   const int BLOCKSIZE = 256;
   T Tzero;
   zero(Tzero);
