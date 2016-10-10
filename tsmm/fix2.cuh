@@ -37,7 +37,7 @@ static __global__ void tsmm_fix2_kernel(const T *__restrict__ A,
       for (int i = 0; i < (M - 1) / GANGSIZE + 1; i++) {
         int m = i * GANGSIZE + gId;
         if (m < M || M % GANGSIZE == 0)
-          gval = axpy(gval, A[row * lda + m], B[m * ldb + n]);
+          gval = axpy(gval, A[row * lda + m], B[n * ldb + m]);
       }
       if (BETAISZERO) {
         out[row * ldc + n] = scale(alpha, warpReduce(gval, GANGSIZE));
@@ -53,8 +53,8 @@ template <typename T, int M, int N>
 bool tsmm_fix2(const size_t blockCount, const int varM, const int varN,
                const int K, const T *A, const int lda, const T alpha,
                const T *B, const int ldb, const T beta, T *C, const int ldc) {
-  if (varM != M || varN != N) return false;
-  if (blockCount == 0) return true;
+  if (varM != M || varN != N || A == C) return false;
+
   const int BLOCKSIZE = 256;
 
   if (M >= 32 / sizeof(T)) {
