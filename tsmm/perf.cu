@@ -132,7 +132,8 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
 
 int main(int argc, char** argv) {
   if (PARM == 0 || PARN == 0) {
-    std::cout << "  M   N  name       K  blockcount     time  GFlop  GByte\n";
+    std::cout << "  M   N  beta self name    K        blockcount  time   GFlop "
+                 "GByte\n";
     return 0;
   }
   int m1 = 0;
@@ -192,18 +193,23 @@ int main(int argc, char** argv) {
     for (int N = n1; N <= n2; N++) {
       if (n1 == 0 && n2 == 0) N = M;
 
-      size_t maxK = 2 * ((size_t)1 << 30) / ((M + N) * 8);
+      int lda = M;
+      int ldb = M;
+      int ldc = N;
+
+      size_t maxK = 1 * ((size_t)1 << 30) / ((M + N) * 8);
       size_t K = 200;
 
       // One warmup call
-      measureMatmul(versions[0].first, M, N, K, M, M, N, 13, 1, false, -1.0);
-      double resultTime = measureMatmul(versions[0].first, M, N, K, M, M, N, 13,
-                                        1, false, -1.0);
+      measureMatmul(versions[0].first, M, N, K, lda, ldb, ldc, 13, 1, false,
+                    -1.0);
+      double resultTime = measureMatmul(versions[0].first, M, N, K, lda, ldb,
+                                        ldc, 13, 1, false, -1.0);
 
-      while (resultTime < 0.005 && K < maxK) {
+      while (resultTime < 0.02 && K < maxK) {
         K = min(maxK, 2 * K);
-        resultTime = measureMatmul(versions[0].first, M, N, K, M, M, N, 13, 1,
-                                   false, -1.0);
+        resultTime = measureMatmul(versions[0].first, M, N, K, lda, ldb, ldc,
+                                   13, 1, false, -1.0);
       }
       if (resultTime < 0) {
         cout << "Reference Kernel does not work\n";
@@ -211,7 +217,8 @@ int main(int argc, char** argv) {
       }
 
       for (const auto& matmulVersion : versions) {
-        for (int self = 0; self <= (M == N) ? 1 : 0; self++) {
+        for (int self = 0; self <= 1; self++) {
+          if (self == 1) ldc = max(M, N);
           for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
             int iters = 1;
 
@@ -222,8 +229,9 @@ int main(int argc, char** argv) {
               int sampleSize = 3;
               vector<double> times(sampleSize);
               for (int t = 0; t < sampleSize; t++) {
-                times[t] = measureMatmul(matmulVersion.first, M, N, K, M, M, N,
-                                         blockCount, iters, (self == 1), beta);
+                times[t] =
+                    measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
+                                  blockCount, iters, (self == 1), beta);
               }
               times.erase(remove_if(begin(times), end(times),
                                     [](double time) { return time < 0; }),
@@ -245,12 +253,12 @@ int main(int argc, char** argv) {
               bw = ((beta == 0 || self == 1 ? 1.0 : 2.0) * N + M) * K *
                    sizeof(double) / bestTime * 1.0e-9;
             }
-            cout << setw(3) << M << " " << setw(3) << N << " " << beta << " "
-                 << (self == 1 ? "A*A" : "A*B") << " " << matmulVersion.second
-                 << " " << setw(9) << K << "  " << setw(10) << bestBlockCount
-                 << " " << setprecision(3) << setw(8) << bestTime << " "
-                 << setw(5) << setprecision(3) << flops << " " << setw(5) << bw
-                 << "\n";
+            cout << setw(3) << M << " " << setw(3) << N << " " << setw(2)
+                 << beta << "    " << (self == 1 ? "A*A" : "A*B") << "  "
+                 << matmulVersion.second << " " << setw(9) << K << "  "
+                 << setw(8) << bestBlockCount << " " << setprecision(3)
+                 << setw(8) << bestTime << " " << setw(5) << setprecision(3)
+                 << flops << " " << setw(5) << bw << "\n";
             cout.flush();
           }
         }
