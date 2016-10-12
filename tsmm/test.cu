@@ -17,6 +17,8 @@
 #include "fix_fb.cuh"
 #include "fix_ip_ghost.cuh"
 #include "var1.cuh"
+#include "var_ip_ghost.cuh"
+#include "varip1.cuh"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -277,6 +279,12 @@ int main(int argc, char** argv) {
 #endif
 #ifdef FIXIPG
   versions.push_back({tsmm_fix_ip_ghost<dtype, PARM, PARN>, "FIXIPG"});
+#endif
+#ifdef VARIPG
+  versions.push_back({tsmm_var_ip_ghost<dtype>, "VARIPG"});
+#endif
+#ifdef VARIP1
+  versions.push_back({tsmm_varip1<dtype>, "VARIP1"});
 #endif
 
 #endif
