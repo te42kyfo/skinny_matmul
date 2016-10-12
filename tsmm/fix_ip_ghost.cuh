@@ -16,7 +16,7 @@ __global__ void fix_ip_ghost_kernel(T *x, const T *const __restrict__ w,
           tmp[threadIdx.x], alpha,
           scale<T>(x[row * stridex + m], w[threadIdx.x * stridew + m]));
     }
-
+    __syncthreads();
     x[row * stridex + threadIdx.x] = tmp[threadIdx.x];
   }
 }
@@ -27,7 +27,7 @@ bool tsmm_fix_ip_ghost(const size_t blockCount, const int varM, const int varN,
                        const T *B, const int ldb, const T beta, T *C,
                        const int ldc) {
   if (varM != M || varN != N || A != C) return false;
-  if (blockCount == 0) return true;
+
   const int BLOCKSIZE = 128;
 
   dim3 block, grid;
@@ -38,8 +38,7 @@ bool tsmm_fix_ip_ghost(const size_t blockCount, const int varM, const int varN,
   grid.y = 1;
   grid.z = 1;
 
-  fix_ip_ghost_kernel<double, N, M><<<grid, block>>>(C, B, alpha, beta, K, ldc,
-                                                     ldb);
+  fix_ip_ghost_kernel<T, N, M><<<grid, block>>>(C, B, alpha, beta, K, ldc, ldb);
 
   return true;
 }
