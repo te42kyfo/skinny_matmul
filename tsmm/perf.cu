@@ -10,15 +10,8 @@
 
 #include "../cu_complex.h"
 #include "../gpu_error.cuh"
-#include "cublas.cuh"
-#include "fix1.cuh"
-#include "fix2.cuh"
-#include "fix_blend.cuh"
-#include "fix_fb.cuh"
-#include "fix_ip_ghost.cuh"
-#include "var1.cuh"
-#include "var_ip_ghost.cuh"
-#include "varip1.cuh"
+#include "versions.hpp"
+#include "types.hpp"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -29,43 +22,6 @@ using namespace std;
 #define XSTR(s) STR(s)
 #define STR(s) #s
 
-#ifdef FC
-typedef complex<float> htype;
-typedef cuFloatComplex dtype;
-dtype makeDtype(htype v) { return make_cuFloatComplex(v.real(), v.imag()); }
-#define RAND_HTYPE(gen) htype(gen, gen)
-#define MAKE_DTYPE(v1, v2) make_cuFloatComplex(v1, v2)
-string mode = "float complex";
-int flopsPerCell = 8;
-
-#elif DC
-typedef complex<double> htype;
-typedef cuDoubleComplex dtype;
-dtype makeDtype(htype v) { return make_cuDoubleComplex(v.real(), v.imag()); }
-#define RAND_HTYPE(gen) htype(gen, gen)
-#define MAKE_DTYPE(v1, v2) make_cuDoubleComplex(v1, v2)
-string mode = "double complex";
-int flopsPerCell = 8;
-
-#elif FR
-typedef float htype;
-typedef float dtype;
-dtype makeDtype(htype v) { return v; }
-#define RAND_HTYPE(gen) htype(gen)
-#define MAKE_DTYPE(v1, v2) float(v1)
-string mode = "float real";
-int flopsPerCell = 2;
-
-#elif DR
-typedef double htype;
-typedef double dtype;
-dtype makeDtype(htype v) { return v; }
-#define RAND_HTYPE(gen) htype(gen)
-#define MAKE_DTYPE(v1, v2) double(v1)
-string mode = "double real";
-int flopsPerCell = 2;
-
-#endif
 
 using MatmulFunctionType = function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
@@ -163,37 +119,7 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  vector<pair<MatmulFunctionType, string>> versions;
-
-#if PARM != 0 && PARN != 0
-#ifdef CUBLAS
-  versions.push_back({tsmm_cublas<dtype>, "CUBLAS"});
-#endif
-#ifdef FIX_BLEND
-  versions.push_back({tsmm_fix_blend<dtype, PARM, PARN>, "FBLEND"});
-#endif
-#ifdef VAR1
-  versions.push_back({tsmm_var1<dtype>, "VAR_V1"});
-#endif
-#ifdef FIX_FB
-  versions.push_back({tsmm_fix_fb<dtype, PARM, PARN>, "FIX_FB"});
-#endif
-#ifdef FIX1
-  versions.push_back({tsmm_fix1<dtype, PARM, PARN>, "FIX_V1"});
-#endif
-#ifdef FIX2
-  versions.push_back({tsmm_fix2<dtype, PARM, PARN>, "FIX_V2"});
-#endif
-#ifdef FIXIPG
-  versions.push_back({tsmm_fix_ip_ghost<dtype, PARM, PARN>, "FIXIPG"});
-#endif
-#ifdef VARIPG
-  versions.push_back({tsmm_var_ip_ghost<dtype>, "VARIPG"});
-#endif
-#ifdef VARIP1
-  versions.push_back({tsmm_varip1<dtype>, "VARIP1"});
-#endif
-#endif
+  auto versions = getEnabledVersions();
 
   initMatmul(1, 1, 2 * ((size_t)1 << 30) / ((1 + 1) * 8), 1, 1, 1, 8 * 13);
 
