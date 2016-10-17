@@ -8,10 +8,11 @@
 #include <iostream>
 #include <vector>
 
+#include "../benchdb.hpp"
 #include "../cu_complex.h"
 #include "../gpu_error.cuh"
-#include "versions.hpp"
 #include "types.hpp"
+#include "versions.hpp"
 
 #if !defined PARM || !defined PARN
 #error "PARM or PARN is not specified! Specify M and N to measure"
@@ -21,7 +22,6 @@ using namespace std;
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
-
 
 using MatmulFunctionType = function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
@@ -89,6 +89,8 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
 }
 
 int main(int argc, char** argv) {
+  BenchDB db("../benchmarks.db");
+
   if (PARM == 0 || PARN == 0) {
     std::cout << "  M   N  beta self name    K        blockcount  time   GFlop "
                  "GByte\n";
@@ -132,25 +134,19 @@ int main(int argc, char** argv) {
       int ldc = N;
 
       size_t maxK = 1 * ((size_t)1 << 30) / ((M + N) * 8);
-      size_t K = 200;
-
-      // One warmup call
-      measureMatmul(versions[0].first, M, N, K, lda, ldb, ldc, 13, 1, false,
-                    -1.0);
-      double resultTime = measureMatmul(versions[0].first, M, N, K, lda, ldb,
-                                        ldc, 13, 1, false, -1.0);
-
-      while (resultTime < 0.02 && K < maxK) {
-        K = min(maxK, 2 * K);
-        resultTime = measureMatmul(versions[0].first, M, N, K, lda, ldb, ldc,
-                                   13, 1, false, -1.0);
-      }
-      if (resultTime < 0) {
-        cout << "Reference Kernel does not work\n";
-        exit(1);
-      }
 
       for (const auto& matmulVersion : versions) {
+        size_t K = 200;
+        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, 13, 1, false,
+                      -1.0);
+        double resultTime = measureMatmul(matmulVersion.first, M, N, K, lda,
+                                          ldb, ldc, 13, 1, false, -1.0);
+
+        while (resultTime > 0 && resultTime < 0.01 && K < maxK) {
+          K = min(maxK, 2 * K);
+          resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
+                                     ldc, 13, 1, false, -1.0);
+        }
         for (int self = 0; self <= 1; self++) {
           if (self == 1) ldc = max(M, N);
           for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
@@ -185,15 +181,20 @@ int main(int argc, char** argv) {
               flops = (M + (beta == 0 ? 0 : 1)) * K * N * flopsPerCell /
                       bestTime * 1.0e-9;
               bw = ((beta == 0 || self == 1 ? 1.0 : 2.0) * N + M) * K *
-                   sizeof(double) / bestTime * 1.0e-9;
+                   sizeof(dtype) / bestTime * 1.0e-9;
             }
             cout << setw(3) << M << " " << setw(3) << N << " " << setw(2)
                  << beta << "    " << (self == 1 ? "A*A" : "A*B") << "  "
                  << matmulVersion.second << " " << setw(9) << K << "  "
                  << setw(8) << bestBlockCount << " " << setprecision(3)
                  << setw(8) << bestTime << " " << setw(5) << setprecision(3)
-                 << flops << " " << setw(5) << bw << "\n";
+                 << flops << " " << setw(5) << bw << "  ";
             cout.flush();
+            double insertStart = dtime();
+            db.insert(M, N, matmulVersion.second, mode, self == 1, beta == 0, K,
+                      bestTime, flops, bw);
+            double insertEnd = dtime();
+            cout << (insertEnd - insertStart) * 1000.0 << "ms\n";
           }
         }
       }
