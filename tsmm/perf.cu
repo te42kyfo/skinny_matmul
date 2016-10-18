@@ -188,13 +188,10 @@ int main(int argc, char** argv) {
                  << matmulVersion.second << " " << setw(9) << K << "  "
                  << setw(8) << bestBlockCount << " " << setprecision(3)
                  << setw(8) << bestTime << " " << setw(5) << setprecision(3)
-                 << flops << " " << setw(5) << bw << "  ";
+                 << flops << " " << setw(5) << bw << "  \n";
             cout.flush();
-            double insertStart = dtime();
             db.insert(M, N, matmulVersion.second, mode, self == 1, beta == 0, K,
                       bestTime, flops, bw);
-            double insertEnd = dtime();
-            cout << (insertEnd - insertStart) * 1000.0 << "ms\n";
           }
         }
       }
