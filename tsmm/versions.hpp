@@ -15,6 +15,7 @@
 #include "varip1.cuh"
 #include "varip2.cuh"
 #include "varip3.cuh"
+#include "varip_blend.cuh"
 
 using MatmulFunctionType = std::function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
@@ -55,6 +56,9 @@ std::vector<std::pair<MatmulFunctionType, std::string>> getEnabledVersions() {
 #endif
 #ifdef VARIP3
   versions.push_back({tsmm_varip3<dtype>, "VARIP3"});
+#endif
+#ifdef VARIP_BLEND
+  versions.push_back({tsmm_varip_blend<dtype>, "VARIPB"});
 #endif
 
 #endif
