@@ -1,6 +1,9 @@
 #pragma once
 #include <string>
-#include "../cu_complex.h"
+#include "cu_complex.h"
+
+#define XSTR(s) STR(s)
+#define STR(s) #s
 
 #ifdef FC
 typedef complex<float> htype;

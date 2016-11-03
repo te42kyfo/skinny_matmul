@@ -4,24 +4,27 @@
 #include <vector>
 #include "types.hpp"
 
-#include "cublas.cuh"
-#include "fix1.cuh"
-#include "fix2.cuh"
-#include "fix_blend.cuh"
-#include "fix_fb.cuh"
-#include "fix_ip_ghost.cuh"
-#include "var1.cuh"
-#include "var_ip_ghost.cuh"
-#include "varip1.cuh"
-#include "varip2.cuh"
-#include "varip3.cuh"
-#include "varip_blend.cuh"
+#include "tsmm/cublas.cuh"
+#include "tsmm/fix1.cuh"
+#include "tsmm/fix2.cuh"
+#include "tsmm/fix_blend.cuh"
+#include "tsmm/fix_fb.cuh"
+#include "tsmm/fix_ip_ghost.cuh"
+#include "tsmm/var1.cuh"
+#include "tsmm/var_ip_ghost.cuh"
+#include "tsmm/varip1.cuh"
+#include "tsmm/varip2.cuh"
+#include "tsmm/varip3.cuh"
+#include "tsmm/varip_blend.cuh"
+#include "tsmttsm/gen_cublas.cuh"
+#include "tsmttsm/genv3.cuh"
 
 using MatmulFunctionType = std::function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
     const dtype, const dtype*, const int, const dtype, dtype*, const int)>;
 
-std::vector<std::pair<MatmulFunctionType, std::string>> getEnabledVersions() {
+std::vector<std::pair<MatmulFunctionType, std::string>>
+getEnabledTSMMVersions() {
   std::vector<std::pair<MatmulFunctionType, std::string>> versions;
 #if PARM != 0 && PARN != 0
 #ifdef FIX_BLEND
@@ -61,6 +64,20 @@ std::vector<std::pair<MatmulFunctionType, std::string>> getEnabledVersions() {
   versions.push_back({tsmm_varip_blend<dtype>, "VARIPB"});
 #endif
 
+#endif
+  return versions;
+}
+
+std::vector<std::pair<MatmulFunctionType, std::string>>
+getEnabledTSMTTSMVersions() {
+  std::vector<std::pair<MatmulFunctionType, std::string>> versions;
+#if PARM != 0 && PARN != 0
+#ifdef CUBLAS
+  versions.push_back({tsmttsm_cublas<dtype>, "CUBLAS"});
+#endif
+#ifdef FIX_GENV3
+  versions.push_back({GENV3::tsmttsm<dtype, PARM, PARN>, "FGENV3"});
+#endif
 #endif
   return versions;
 }
