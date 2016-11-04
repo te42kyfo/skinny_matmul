@@ -17,7 +17,12 @@
 #include "tsmm/varip3.cuh"
 #include "tsmm/varip_blend.cuh"
 #include "tsmttsm/gen_cublas.cuh"
+#include "tsmttsm/genv1.cuh"
 #include "tsmttsm/genv3.cuh"
+#include "tsmttsm/genv4.cuh"
+#include "tsmttsm/genv5.cuh"
+#include "tsmttsm/specsmall.cuh"
+
 
 using MatmulFunctionType = std::function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
@@ -75,8 +80,20 @@ getEnabledTSMTTSMVersions() {
 #ifdef CUBLAS
   versions.push_back({tsmttsm_cublas<dtype>, "CUBLAS"});
 #endif
+#ifdef FIX_GENV1
+  versions.push_back({GENV1::tsmttsm<dtype, PARM, PARN>, "FGENV1"});
+#endif
 #ifdef FIX_GENV3
   versions.push_back({GENV3::tsmttsm<dtype, PARM, PARN>, "FGENV3"});
+#endif
+#ifdef FIX_GENV4
+  versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN>, "FGENV4"});
+#endif
+#ifdef FIX_GENV5
+  versions.push_back({GENV5::tsmttsm<dtype, PARM, PARN>, "FGENV5"});
+#endif
+#ifdef FIX_SPECSMALL
+  versions.push_back({SPECSMALL::tsmttsm<dtype, PARM, PARN>, "FSMALL"});
 #endif
 #endif
   return versions;

@@ -134,8 +134,9 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
                             ldb, dbeta, C_dirty, ldc);
   }
 #endif
-  if (self && M == N) {
+
 #ifdef TSMTTSM
+  if (self && M == N) {
     result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, A_dirty,
                             lda, dbeta, C_dirty, ldc);
   } else {

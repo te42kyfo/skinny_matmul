@@ -2,7 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <iostream>
-#include "cu_complex.h"
+#include "../cu_complex.h"
 
 namespace SPECSMALL {
 
@@ -83,40 +83,38 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
   }
 }
 
-template <typename T, int M, int N>
-void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
-            const size_t blockCount, const int K, const T alpha, const T *A,
-            const int lda, const T *B, const int ldb, const T beta, T *C,
-            const int ldc) {
-  if (temp_storage_bytes == 0) {
-    temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
-    return;
-  }
+void *d_temp_storage = NULL;
 
-  if (M > 32 || N > 32) {
-    std::cerr << "This Kernel cannot be instanciated for M,N > 32\n";
-    return;
-  }
+template <typename T, int M, int N>
+bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
+             const T *A, const int lda, const T alpha, const T *B,
+             const int ldb, const T beta, T *C, const int ldc) {
+  if (varM != M || varN != N) return false;
+  if (varM > 32 || varN > 32) return false;
+  if (d_temp_storage == NULL)
+    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
+  if (blockCount * M * N > 100 * 100 * 1000) return false;
 
   int const blocksize = 256;
 
   if (N > M) {
     SPECSMALL::blockProductKernel<T, N, M, blocksize, true,
                                   false><<<blockCount, blocksize>>>(
-        B, A, d_temp_storage, K, ldb, lda, ldc);
+        B, A, (T *)d_temp_storage, K, ldb, lda, ldc);
 
   } else {
     if (M == N && A == B) {
       SPECSMALL::blockProductKernel<T, M, N, blocksize, false,
                                     true><<<blockCount, blocksize>>>(
-          A, B, d_temp_storage, K, lda, ldb, ldc);
+          A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
     } else {
       SPECSMALL::blockProductKernel<T, M, N, blocksize, false,
                                     false><<<blockCount, blocksize>>>(
-          A, B, d_temp_storage, K, lda, ldb, ldc);
+          A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
     }
   }
   SPECSMALL::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
-      d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+      (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  return true;
 }
 }

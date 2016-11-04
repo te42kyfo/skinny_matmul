@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cub.cuh"
 #include <cuda_runtime.h>
 #include <iostream>
+#include "../../cub/cub.cuh"
 
 namespace GENV1 {
 
@@ -66,21 +66,23 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
   }
 }
 
+void *d_temp_storage = NULL;
+
 template <typename T, int M, int N>
-void matmul(size_t &temp_storage_bytes, T *d_temp_storage,
-            const size_t blockCount, const int K, const T alpha, const T *A,
-            const int lda, const T *B, const int ldb, const T beta, T *C,
-            const int ldc) {
-  if (temp_storage_bytes == 0) {
-    cudaFuncSetCacheConfig(blockProductKernel<T, M, N, 256>,
-                           cudaFuncCachePreferL1);
-    temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
-    return;
-  }
+bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
+             const T *A, const int lda, const T alpha, const T *B,
+             const int ldb, const T beta, T *C, const int ldc) {
+  if (varM != M || varN != N) return false;
+
+  if (d_temp_storage == NULL)
+    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
+  if (blockCount * M * N > 100 * 100 * 1000) return false;
+
   GENV1::blockProductKernel<T, M, N, 256><<<blockCount, 256>>>(
-      A, B, d_temp_storage, K, lda, ldb, ldc);
+      A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
 
   GENV1::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
-      d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+      (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  return true;
 }
 }
