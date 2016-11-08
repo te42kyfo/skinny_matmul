@@ -1,69 +1,32 @@
 NVCC := nvcc
 
 # internal flags
-NVCCFLAGS   := -std=c++11 -O3 -arch=sm_35 --compiler-options="-O2 -pipe -march=native -Wall -fopenmp" -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable"
+NVCCFLAGS   := -std=c++11 -O3 -arch=sm_35 --compiler-options="-O2 -pipe -march=native -Wall -fopenmp -g" -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable" -Xptxas="-v"
 CCFLAGS     :=
 LDFLAGS     := -L/opt/cuda/lib64 -lcublas
-INCLUDES 	:= -I/home/hpc/ihpc/ihpc05/cub/
-NAME 		:= skinny_matmul
+INCLUDES 	:=
 M 			:= 1
 N			:= 1
-GENVER 		:= GENV3
-MODE 		:= DR
-CONSTANTS	:= -DPARM=$M -DPARN=$N -DSKYBLAS_GENVER=$(GENVER) -D$(MODE)=1
+#VERSIONS 	:= -DFIX1 -DFIX2 -DFIX_FB -DCUBLAS -DFIX_BLEND -DVAR1 -DFIXIPG
+TSMM_VERSIONS 		:= -DCUBLAS
+TSMTTSM_VERSIONS 	:= -DCUBLAS -DFIX_GENV1 -DFIX_GENV3 -DFIX_GENV4 -DFIX_GENV5 -DFIX_SPECSMALL
+TYPES 		:= DR
+MULTYPE		:= TSMTTSM
+CONSTANTS	:= -DPARM=$M -DPARN=$N -D$(MULTYPE)=1 -D$(TYPES)=1 $(TSMTTSM_VERSIONS) $(TSMM_VERSIONS) -DVERBOSE_ERRORS
 PREFIX		:= .
 
-# perf
-######
+NAME 		:= -$(MULTYPE)-$M-$N-$(TYPES)
 
-runperf: perf
-	$(PREFIX)/$<$M-$N-$(GENVER)
+test: $(PREFIX)/test$(NAME)
 
-perf: perf.cu genv?.cuh skyblas.cuh Makefile
-	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $(PREFIX)/$@$M-$N-$(GENVER)-$(MODE)  $<  $(LDFLAGS)
-
-runtest: $(PREFIX)/test$M-$N-$(GENVER)
-	$(PREFIX)/test$M-$N-$(GENVER)
+$(PREFIX)/test$(NAME): test.cu Makefile *.cuh tsmttsm/*.cuh tsmm/*.cuh
+	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS)
 
 
-# test
-######
+perf: $(PREFIX)/perf$(NAME)
 
-test: $(PREFIX)/test$M-$N-$(GENVER)-$(MODE)
+$(PREFIX)/perf$(NAME): perf.cu ../sqlite3.o ../benchdb.hpp *.cuh Makefile
+	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< sqlite3.o $(LDFLAGS)
 
-$(PREFIX)/test$M-$N-$(GENVER)-$(MODE): test.cu genv?.cuh spec8x8.cuh specsmall.cuh gen_cublas.cuh skyblas.cuh Makefile
-	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
-
-
-# test_tsmm
-###########
-
-run_test_tsmm: $(PREFIX)/test_tsmm$M-$N-$(MODE)
-	$(PREFIX)/test_tsmm$M-$N-$(MODE)
-
-test_tsmm: $(PREFIX)/test_tsmm$M-$N-$(MODE)
-
-$(PREFIX)/test_tsmm$M-$N-$(MODE): test_tsmm.cu tsmm.cuh Makefile
-	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
-
-
-# perf_tsmm
-###########
-
-run_perf_tsmm: $(PREFIX)/perf_tsmm$M-$N-$(MODE)
-	$(PREFIX)/perf_tsmm$M-$N-$(MODE)
-
-perf_tsmm: $(PREFIX)/perf_tsmm$M-$N-$(MODE)
-
-$(PREFIX)/perf_tsmm$M-$N-$(MODE): perf_tsmm.cu tsmm.cuh Makefile
-	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS) --compiler-options="-fopenmp  -g"
-
-
-
-clean:
-	rm -f ./$(NAME)
-	rm -f main.o
-	rm -f test.o
-	rm -f perf.o
-	rm -f perf
-	rm -f test
+sqlite3.o: sqlite3.c sqlite3.h
+	gcc -O3 sqlite3.c -c -o sqlite3.o

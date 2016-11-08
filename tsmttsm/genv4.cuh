@@ -1,7 +1,7 @@
 #pragma once
 
-#include "cub.cuh"
 #include <cuda_runtime.h>
+#include "../gpu_error.cuh"
 
 namespace GENV4 {
 
@@ -24,7 +24,7 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
   result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
-template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
+template <typename T, int M, int N, int BLOCKSIZE>
 __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
                                    size_t lda, size_t ldb, size_t ldc) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -59,24 +59,28 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
   }
 }
 
+void *d_temp_storage = NULL;
+
 template <typename T, int M, int N>
-void matmul(size_t &temp_storage_bytes, T *d_temp_storage, size_t blockCount,
-            const int K, const T alpha, const T *A, const int lda, const T *B,
-            const int ldb, const T beta, T *C, const int ldc) {
+bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
+             const T *A, const int lda, const T alpha, const T *B,
+             const int ldb, const T beta, T *C, const int ldc) {
+  if (varM != M || varN != N) return false;
+  if (d_temp_storage == NULL)
+    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
+  if (blockCount * M * N > 100 * 100 * 1000) return false;
+
   if (M * N > blockCount * 256) {
     blockCount = M * N / 256 + 1;
   }
 
-  if (temp_storage_bytes == 0) {
-    temp_storage_bytes = blockCount * sizeof(T) * N * ldc;
-    return;
-  }
-  cudaMemset(d_temp_storage, 0, temp_storage_bytes);
+  cudaMemset(d_temp_storage, 0, 100 * 100 * 1000 * sizeof(dtype));
 
-  GENV4::blockProductKernel<T, M, N, 256, false><<<blockCount, 256>>>(
-      A, B, d_temp_storage, K, lda, ldb, ldc);
+  GENV4::blockProductKernel<T, M, N, 256><<<blockCount, 256>>>(
+      A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
 
   GENV4::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
-      d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+      (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  return true;
 }
 }

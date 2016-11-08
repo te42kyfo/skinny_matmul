@@ -4,6 +4,7 @@
 #include "../eq.cuh"
 #include "../gpu_error.cuh"
 
+namespace {
 struct scopedCuMemDelete {
   void *_ptr;
   scopedCuMemDelete(void *ptr) : _ptr(ptr) {}
@@ -12,11 +13,12 @@ struct scopedCuMemDelete {
 
 cublasHandle_t cublas_handle;
 bool cublas_handle_initialized = false;
+}
+
 template <typename T>
 bool tsmm_cublas(const int blockCount, const int M, const int N, const int K,
                  const T *A, const int lda, const T alpha, const T *B,
                  const int ldb, const T beta, T *C, const int ldc) {
-  if (blockCount == 0) return true;
   if (!cublas_handle_initialized) {
     cublasCreate(&cublas_handle);
     cublas_handle_initialized = true;
