@@ -19,16 +19,14 @@
 
 using namespace std;
 
-#define XSTR(s) STR(s)
-#define STR(s) #s
-
-double dtime() {
-  double tseconds = 0;
-  struct timeval t;
-  gettimeofday(&t, NULL);
-  tseconds = (double)t.tv_sec + (double)t.tv_usec * 1.0e-6;
-  return tseconds;
-}
+#ifdef TSMM
+bool tsmttsm_mode = false;
+bool tsmm_mode = true;
+#endif
+#ifdef TSMTTSM
+bool tsmttsm_mode = true;
+bool tsmm_mode = false;
+#endif
 
 void printMatrix(const vector<htype>& m1, const vector<htype>& m2, size_t N1,
                  size_t N2, size_t stride, size_t position = 0,
@@ -63,7 +61,7 @@ dtype *A_clean, *B_clean, *C_clean;
 dtype *A_dirty, *B_dirty, *C_dirty;
 dtype* temp_storage;
 
-void initMatmul(int lda, int ldb, int ldc) {
+void initMatmul() {
   hA = vector<htype>(totalA);
   hB = vector<htype>(totalB);
   hC = vector<htype>(totalC);
@@ -125,25 +123,18 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
   dtype dbeta = makeDtype(beta);
   bool result;
 
-#ifdef TSMM
-  if (self) {
-    result = matmulFunction(blockCount, M, N, K, C_dirty, ldc, dalpha, B_dirty,
-                            ldb, dbeta, C_dirty, ldc);
-  } else {
+  if (!self) {
     result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, B_dirty,
                             ldb, dbeta, C_dirty, ldc);
-  }
-#endif
-
-#ifdef TSMTTSM
-  if (self && M == N) {
+  } else if (tsmm_mode) {
+    result = matmulFunction(blockCount, M, N, K, C_dirty, ldc, dalpha, B_dirty,
+                            ldb, dbeta, C_dirty, ldc);
+  } else if (M == N) {
     result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, A_dirty,
                             lda, dbeta, C_dirty, ldc);
   } else {
-    result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, B_dirty,
-                            ldb, dbeta, C_dirty, ldc);
+    result = false;
   }
-#endif
 
   GPU_ERROR(cudaMemcpy(resultDest.data(), C_dirty, sizeof(htype) * totalC,
                        cudaMemcpyDefault));
@@ -233,23 +224,22 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  int maxK = 0.05 * ((size_t)1 << 30) / 208 / (2 * sizeof(dtype));
-  totalA = maxK * 104;
+  size_t maxMatrixSize = 0.05 * ((size_t)1 << 30) / (2 * sizeof(dtype));
+  totalA = maxMatrixSize;
 
 #ifdef TSMM
   auto versions = getEnabledTSMMVersions();
   MatmulFunctionType referenceFunction = tsmm_cublas<dtype>;
   totalB = 104 * 104;
-  totalC = maxK * 104;
-  initMatmul(104, 104, 104);
+  totalC = maxMatrixSize;
 #endif
 #ifdef TSMTTSM
   auto versions = getEnabledTSMTTSMVersions();
   MatmulFunctionType referenceFunction = tsmttsm_cublas<dtype>;
-  totalB = maxK * 104;
+  totalB = maxMatrixSize;
   totalC = 104 * 104;
-  initMatmul(104, 104, 104);
 #endif
+  initMatmul();
 
   random_device r;
   default_random_engine gen(r());
@@ -262,7 +252,7 @@ int main(int argc, char** argv) {
       if (n1 == 0 && n2 == 0) N = M;
 
       for (const auto& matmulVersion : versions) {
-        cout << M << "xKx" << N << "  " << matmulVersion.second << " " << mode
+        cout << M << "xKx" << N << "  " << matmulVersion.second << " " << types
              << " ";
         bool passed = true;
 
@@ -271,17 +261,16 @@ int main(int argc, char** argv) {
             for (int t = 0; t < sampleSize; t++) {
               for (int blockCount = 1 * 13; blockCount <= 8 * 13;
                    blockCount += 13) {
-#ifdef TSMM
                 size_t lda = M + dis(gen);
+#ifdef TSMM
                 size_t ldb = M + dis(gen);
                 size_t ldc = (self == 1 ? max(N + dis(gen), M) : N + dis(gen));
-                size_t K = maxK / (lda + ldc);
+                size_t K = maxMatrixSize / max(lda, ldc);
 #endif
 #ifdef TSMTTSM
-                size_t lda = M + dis(gen);
                 size_t ldb = N + dis(gen);
                 size_t ldc = M + dis(gen);
-                size_t K = maxK / (lda + ldb);
+                size_t K = maxMatrixSize / max(lda, ldb);
 #endif
                 auto result =
                     testMatmul(matmulVersion.first, referenceFunction, M, N, K,

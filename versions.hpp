@@ -21,8 +21,8 @@
 #include "tsmttsm/genv3.cuh"
 #include "tsmttsm/genv4.cuh"
 #include "tsmttsm/genv5.cuh"
+#include "tsmttsm/genv6.cuh"
 #include "tsmttsm/specsmall.cuh"
-
 
 using MatmulFunctionType = std::function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
@@ -91,6 +91,9 @@ getEnabledTSMTTSMVersions() {
 #endif
 #ifdef FIX_GENV5
   versions.push_back({GENV5::tsmttsm<dtype, PARM, PARN>, "FGENV5"});
+#endif
+#ifdef FIX_GENV6
+  versions.push_back({GENV6::tsmttsm<dtype, PARM, PARN>, "FGENV6"});
 #endif
 #ifdef FIX_SPECSMALL
   versions.push_back({SPECSMALL::tsmttsm<dtype, PARM, PARN>, "FSMALL"});

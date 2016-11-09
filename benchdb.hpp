@@ -6,8 +6,11 @@
 #include "sqlite3.h"
 
 struct Entry {
+  std::string multype;
+  std::string device;
+  std::string types;
   int M, N;
-  std::string name, mode;
+  std::string name;
   bool inplace, zerobeta;
   int K;
   double time, flops, bw;
@@ -16,7 +19,7 @@ struct Entry {
 class BenchDB {
  public:
   BenchDB(std::string dbFileName) : _dbFileName(dbFileName) {
-    std::cout << "BenchDB: open db " << dbFileName << "\n";
+    //    std::cout << "BenchDB: open db " << dbFileName << "\n";
     int result = sqlite3_open(_dbFileName.c_str(), &_dbCon);
 
     if (!_dbCon || result != SQLITE_OK) {
@@ -26,10 +29,11 @@ class BenchDB {
       sqlite3_close(_dbCon);
       _dbCon = NULL;
     }
+    sqlite3_busy_timeout(_dbCon, 10000);
   }
   ~BenchDB() {
     flush_entries();
-    std::cout << "BenchDB: close database\n";
+    // std::cout << "BenchDB: close database\n";
     int result = sqlite3_close(_dbCon);
     if (result != SQLITE_OK) {
       std::cerr << "BenchDB: sqlite3_close Error\n";
@@ -39,9 +43,11 @@ class BenchDB {
   }
   BenchDB(const BenchDB&) = delete;
 
-  void insert(int M, int N, std::string name, std::string mode, bool inplace,
-              bool zerobeta, int K, double time, double flops, double bw) {
-    _queue.push_back({M, N, name, mode, inplace, zerobeta, K, time, flops, bw});
+  void insert(std::string multype, std::string device, std::string types, int M,
+              int N, std::string name, bool inplace, bool zerobeta, int K,
+              double time, double flops, double bw) {
+    _queue.push_back({multype, device, types, M, N, name, inplace, zerobeta, K,
+                      time, flops, bw});
     if (_queue.size() > 50) flush_entries();
   }
 
@@ -56,10 +62,9 @@ class BenchDB {
     if (_dbCon == NULL) return;
     std::stringstream query;
 
-    query << "INSERT OR REPLACE INTO tsmm (M, N, name, inplace, zerobeta, K, "
-             "time, "
-             "flops, "
-             "bw) values("
+    query << "INSERT OR REPLACE INTO benchmarks (multype, device, types, M, N, name, "
+             "inplace, zerobeta, K, time, flops, bw) values(\""
+          << e.multype << "\", \"" << e.device << "\", \"" << e.types << "\", "
           << e.M << ", " << e.N << ", \"" << e.name << "\", " << e.inplace
           << ", " << e.zerobeta << ", " << e.K << ", " << e.time << ", "
           << e.flops << ", " << e.bw << ")";
