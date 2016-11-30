@@ -32,7 +32,7 @@ void printMatrix(const vector<htype>& m1, const vector<htype>& m2, size_t N1,
                  size_t N2, size_t stride, size_t position = 0,
                  string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  const size_t range = 5;
+  const size_t range = 32;
   size_t n1 = position < range ? 0 : position - range;
   cout << " - " << n1 << " - \n";
 
@@ -119,7 +119,7 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
       cudaMemcpy(B_dirty, B_clean, sizeof(htype) * totalB, cudaMemcpyDefault));
   GPU_ERROR(
       cudaMemcpy(C_dirty, C_clean, sizeof(htype) * totalC, cudaMemcpyDefault));
-  dtype dalpha = makeDtype(2.0);
+  dtype dalpha = makeDtype(1.0);
   dtype dbeta = makeDtype(beta);
   bool result;
 
@@ -147,6 +147,7 @@ TESTRESULT testMatmul(MatmulFunctionType matmulFunction,
                       MatmulFunctionType referenceFunction, size_t M, size_t N,
                       size_t K, int lda, int ldb, int ldc, size_t blockCount,
                       bool self, htype beta) {
+
   // matmulFunction does not support parameters, this is a pass
   if (!cleanMatmul(matmulFunction, M, N, K, lda, ldb, ldc, blockCount, self,
                    beta, hC_test))
@@ -164,8 +165,8 @@ TESTRESULT testMatmul(MatmulFunctionType matmulFunction,
   size_t C2 = N;
 #endif
 #ifdef TSMTTSM
-  size_t C1 = N;
-  size_t C2 = M;
+  size_t C1 = M;
+  size_t C2 = N;
 #endif
 
   for (size_t c1 = 0; c1 < C1; c1++) {
@@ -224,7 +225,7 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  size_t maxMatrixSize = 0.05 * ((size_t)1 << 30) / (2 * sizeof(dtype));
+  size_t maxMatrixSize = 0.1 * ((size_t)1 << 30) / (2 * sizeof(dtype));
   totalA = maxMatrixSize;
 
 #ifdef TSMM
@@ -272,6 +273,7 @@ int main(int argc, char** argv) {
                 size_t ldc = M + dis(gen);
                 size_t K = maxMatrixSize / max(lda, ldb);
 #endif
+                K = uniform_int_distribution<int>(1, K)(gen);
                 auto result =
                     testMatmul(matmulVersion.first, referenceFunction, M, N, K,
                                lda, ldb, ldc, blockCount, (self == 1), beta);
