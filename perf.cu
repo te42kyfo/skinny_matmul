@@ -96,10 +96,11 @@ int main(int argc, char** argv) {
 
   cudaDeviceProp prop;
   int deviceId;
+
   GPU_ERROR(cudaGetDevice(&deviceId));
   GPU_ERROR(cudaGetDeviceProperties(&prop, deviceId));
   std::string deviceName = prop.name;
-
+  int smCount = prop.multiProcessorCount;
   int m1 = 0;
   int m2 = 0;
   int n1 = 0;
@@ -140,6 +141,7 @@ int main(int argc, char** argv) {
   totalB = maxMatrixSize;
   totalC = 104 * 104;
 #endif
+
   initMatmul();
 
   for (int M = m1; M <= m2; M++) {
@@ -158,17 +160,17 @@ int main(int argc, char** argv) {
       size_t maxK = maxMatrixSize / max(lda, ldb);
 #endif
 
-      for (const auto& matmulVersion : versions) {
-        size_t K = 2000000;
-        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, 13, 1, false,
-                      -1.0);
+      for (auto matmulVersion : versions) {
+        size_t K = 200;
+        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount, 1,
+                      false, -1.0);
         double resultTime = measureMatmul(matmulVersion.first, M, N, K, lda,
-                                          ldb, ldc, 13, 1, false, -1.0);
+                                          ldb, ldc, smCount, 1, false, -1.0);
 
         while (resultTime > 0 && resultTime < 0.01 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
-                                     ldc, 13, 1, false, -1.0);
+                                     ldc, smCount, 1, false, -1.0);
         }
         for (int self = 0; self <= (M == N || tsmm_mode ? 1 : 0); self++) {
           if (self == 1 && tsmm_mode) ldc = max(M, N);
@@ -177,8 +179,8 @@ int main(int argc, char** argv) {
 
             double bestTime = -1;
             int bestBlockCount = 0;
-            for (int blockCount = 1 * 13; blockCount <= 8 * 13;
-                 blockCount += 13) {
+            for (int blockCount = 1 * smCount; blockCount <= 8 * smCount;
+                 blockCount += smCount) {
               int sampleSize = 3;
               vector<double> times(sampleSize);
               for (int t = 0; t < sampleSize; t++) {
@@ -221,8 +223,21 @@ int main(int argc, char** argv) {
                  << " " << setw(5) << setprecision(3) << flops << " " << setw(5)
                  << bw << "  \n";
             cout.flush();
-            db.insert(multype, deviceName, types, M, N, matmulVersion.second,
-                      self == 1, beta == 0, K, bestTime, flops, bw);
+            db.insert({{"multype", "\"" + multype + "\""},
+                       {"device", "\"" + deviceName + "\""},
+                       {"types", "\"" + types + "\""},
+                       {"M", to_string(M)},
+                       {"N", to_string(N)},
+                       {"name", "\"" + matmulVersion.second + "\""},
+                       {"inplace", to_string(self)},
+                       {"zerobeta", to_string(beta == 0)},
+                       {"usr1_name", "\"\""},
+                       {"usr1_val", "\"\""}},
+
+                      {{"K", to_string(K)},
+                       {"time", to_string(bestTime)},
+                       {"flops", to_string(flops)},
+                       {"bw", to_string(bw)}});
           }
         }
       }
