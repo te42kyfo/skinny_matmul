@@ -29,7 +29,7 @@ bool tsmm_varip1(const size_t blockCount, const int varM, const int varN,
                  const int K, const T *A, const int lda, const T alpha,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   const int threadsPerBlock = (256 / varN) * varN;
-  int newBlockCount = (K / varN / threadsPerBlock / 13) * 13;
+  int newBlockCount = max(1, (K / varN / threadsPerBlock / 13) * 13);
 
   T Tzero;
   zero(Tzero);
