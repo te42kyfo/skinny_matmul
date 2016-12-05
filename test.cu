@@ -32,7 +32,7 @@ void printMatrix(const vector<htype>& m1, const vector<htype>& m2, size_t N1,
                  size_t N2, size_t stride, size_t position = 0,
                  string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  const size_t range = 32;
+  const size_t range = 10;
   size_t n1 = position < range ? 0 : position - range;
   cout << " - " << n1 << " - \n";
 
@@ -165,8 +165,8 @@ TESTRESULT testMatmul(MatmulFunctionType matmulFunction,
   size_t C2 = N;
 #endif
 #ifdef TSMTTSM
-  size_t C1 = M;
-  size_t C2 = N;
+  size_t C1 = N;
+  size_t C2 = M;
 #endif
 
   for (size_t c1 = 0; c1 < C1; c1++) {
@@ -180,9 +180,9 @@ TESTRESULT testMatmul(MatmulFunctionType matmulFunction,
              << " ";
 #ifdef VERBOSE_ERRORS
         cout << "\n";
-        printMatrix(hC_test, hC_reference, C2, C1, ldc, c1);
+        printMatrix(hC_test, hC_reference, C1, C2, ldc, c1);
         cout << "\n--\n";
-        printMatrix(hC_reference, hC_reference, C2, C1, ldc, c1);
+        printMatrix(hC_reference, hC_reference, C1, C2, ldc, c1);
         cout << "--\n\n";
         cout << K << " Rows\n";
 #endif
