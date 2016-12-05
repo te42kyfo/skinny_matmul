@@ -19,6 +19,8 @@
 #include "tsmttsm/gen_cublas.cuh"
 #include "tsmttsm/genv1.cuh"
 #include "tsmttsm/genv3.cuh"
+#include "tsmttsm/genv32.cuh"
+#include "tsmttsm/genv3x.cuh"
 #include "tsmttsm/genv4.cuh"
 #include "tsmttsm/genv5.cuh"
 #include "tsmttsm/genv6.cuh"
@@ -85,6 +87,12 @@ getEnabledTSMTTSMVersions() {
 #endif
 #ifdef FIX_GENV3
   versions.push_back({GENV3::tsmttsm<dtype, PARM, PARN>, "FGENV3"});
+#endif
+#ifdef FIX_GENV32
+  versions.push_back({GENV32::tsmttsm<dtype, PARM, PARN>, "FGEN32"});
+#endif
+#ifdef FIX_GENV3X
+  versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 2>, "FGEN3X"});
 #endif
 #ifdef FIX_GENV4
   versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN>, "FGENV4"});

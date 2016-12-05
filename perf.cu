@@ -160,7 +160,25 @@ int main(int argc, char** argv) {
       size_t maxK = maxMatrixSize / max(lda, ldb);
 #endif
 
-      for (auto matmulVersion : versions) {
+      versions.clear();
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 1>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 2>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 3>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 4>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 5>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 6>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 7>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 8>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 9>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 10>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 11>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 12>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 13>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 14>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 15>, "GENV3X"});
+      versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 16>, "GENV3X"});
+      for (int i = 0; i < 16; i++) {
+        auto matmulVersion = versions[i];
         size_t K = 200;
         measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount, 1,
                       false, -1.0);
@@ -231,9 +249,8 @@ int main(int argc, char** argv) {
                        {"name", "\"" + matmulVersion.second + "\""},
                        {"inplace", to_string(self)},
                        {"zerobeta", to_string(beta == 0)},
-                       {"usr1_name", "\"\""},
-                       {"usr1_val", "\"\""}},
-
+                       {"usr1_name", "\"threads_per_n\""},
+                       {"usr1_val", "\"" + to_string(i) + "\""}},
                       {{"K", to_string(K)},
                        {"time", to_string(bestTime)},
                        {"flops", to_string(flops)},
