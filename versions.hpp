@@ -86,7 +86,7 @@ getEnabledTSMTTSMVersions() {
   versions.push_back({GENV1::tsmttsm<dtype, PARM, PARN>, "FGENV1"});
 #endif
 #ifdef FIX_GENV3
-  versions.push_back({GENV3::tsmttsm<dtype, PARM, PARN>, "FGENV3"});
+  versions.push_back({GENV3::tsmttsm<dtype, dItype, PARM, PARN>, "FGENV3"});
 #endif
 #ifdef FIX_GENV32
   versions.push_back({GENV32::tsmttsm<dtype, PARM, PARN>, "FGEN32"});
@@ -104,7 +104,7 @@ getEnabledTSMTTSMVersions() {
   versions.push_back({GENV6::tsmttsm<dtype, PARM, PARN>, "FGENV6"});
 #endif
 #ifdef FIX_SPECSMALL
-  versions.push_back({SPECSMALL::tsmttsm<dtype, PARM, PARN>, "FSMALL"});
+  versions.push_back({SPECSMALL::tsmttsm<dtype, dItype, PARM, PARN>, "FSMALL"});
 #endif
 #endif
   return versions;
