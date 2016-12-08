@@ -147,7 +147,6 @@ TESTRESULT testMatmul(MatmulFunctionType matmulFunction,
                       MatmulFunctionType referenceFunction, size_t M, size_t N,
                       size_t K, int lda, int ldb, int ldc, size_t blockCount,
                       bool self, htype beta) {
-
   // matmulFunction does not support parameters, this is a pass
   if (!cleanMatmul(matmulFunction, M, N, K, lda, ldb, ldc, blockCount, self,
                    beta, hC_test))
@@ -246,7 +245,7 @@ int main(int argc, char** argv) {
   default_random_engine gen(r());
   uniform_int_distribution<int> dis(0, 4);
 
-  int sampleSize = 2;
+  int sampleSize = 1000;
 
   for (int M = m1; M <= m2; M++) {
     for (int N = n1; N <= n2; N++) {
@@ -260,37 +259,35 @@ int main(int argc, char** argv) {
         for (int self = 0; self <= 1; self++) {
           for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
             for (int t = 0; t < sampleSize; t++) {
-              for (int blockCount = 1 * 13; blockCount <= 8 * 13;
-                   blockCount += 13) {
-                size_t lda = M + dis(gen);
+              int blockCount = uniform_int_distribution<int>(1, 200)(gen);
+              size_t lda = M + dis(gen);
 #ifdef TSMM
-                size_t ldb = M + dis(gen);
-                size_t ldc = (self == 1 ? max(N + dis(gen), M) : N + dis(gen));
-                size_t K = maxMatrixSize / max(lda, ldc);
+              size_t ldb = M + dis(gen);
+              size_t ldc = (self == 1 ? max(N + dis(gen), M) : N + dis(gen));
+              size_t K = maxMatrixSize / max(lda, ldc);
 #endif
 #ifdef TSMTTSM
-                size_t ldb = N + dis(gen);
-                size_t ldc = M + dis(gen);
-                size_t K = maxMatrixSize / max(lda, ldb);
+              size_t ldb = N + dis(gen);
+              size_t ldc = M + dis(gen);
+              size_t K = maxMatrixSize / max(lda, ldb);
 #endif
-                K = uniform_int_distribution<int>(1, K)(gen);
-                auto result =
-                    testMatmul(matmulVersion.first, referenceFunction, M, N, K,
-                               lda, ldb, ldc, blockCount, (self == 1), beta);
-                if (result == TESTRESULT::PASS) {
-                  cout << "#";
-                  passed &= true;
-                }
-                if (result == TESTRESULT::SKIP) {
-                  cout << "\e[35m-\e[0m";
-                  passed &= true;
-                }
-                if (result == TESTRESULT::FAIL) {
-                  cout << "\e[31mX\e[0m";
-                  passed &= false;
-                }
-                cout.flush();
+              K = uniform_int_distribution<int>(1, K)(gen);
+              auto result =
+                  testMatmul(matmulVersion.first, referenceFunction, M, N, K,
+                             lda, ldb, ldc, blockCount, (self == 1), beta);
+              if (result == TESTRESULT::PASS) {
+                cout << "#";
+                passed &= true;
               }
+              if (result == TESTRESULT::SKIP) {
+                cout << "\e[35m-\e[0m";
+                passed &= true;
+              }
+              if (result == TESTRESULT::FAIL) {
+                cout << "\e[31mX\e[0m";
+                passed &= false;
+              }
+              cout.flush();
             }
           }
         }
