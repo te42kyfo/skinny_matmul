@@ -12,6 +12,16 @@ __device__ PseudoQuad Fast2Sum(double a, double b) {
   return {s, t};
 }
 
+__device__ PseudoQuad Gen2Sum(double a, double b) {
+  double s = __dadd_rn(a, b);
+  double ap = __dadd_rn(s, -b);
+  double bp = __dadd_rn(s, -ap);
+  double da = __dadd_rn(a, -ap);
+  double db = __dadd_rn(b, -bp);
+  double t = __dadd_rn(da, db);
+  return {s, t};
+}
+
 __device__ PseudoQuad FMA2Mult(double a, double b) {
   double s = __dmul_rn(a, b);
   double t = __fma_rn(a, b, -s);
@@ -38,14 +48,27 @@ __device__ inline void fromReal<PseudoQuad, double>(PseudoQuad &val,
 
 // --- ACCU --- T S = A + B,  Melvens version
 // ------------------------------------------
-template <>
-__device__ PseudoQuad accu(PseudoQuad X, PseudoQuad Y) {
+// template <>
+__device__ PseudoQuad accu_fast(PseudoQuad X, PseudoQuad Y) {
   PseudoQuad S = Fast2Sum(X.s, Y.s);
   PseudoQuad T = Fast2Sum(X.t, Y.t);
   PseudoQuad V = Fast2Sum(S.t, T.s);
   double W = __dadd_rn(T.t, V.t);
   PseudoQuad R = Fast2Sum(S.s, V.s);
   R.t = __dadd_rn(R.t, W);
+  return R;
+}
+
+// --- ACCU --- T S = A + B,  Book version
+// ------------------------------------------
+template <>
+__device__ PseudoQuad accu(PseudoQuad X, PseudoQuad Y) {
+  PseudoQuad S = Gen2Sum(X.s, Y.s);
+  PseudoQuad T = Gen2Sum(X.t, Y.t);
+  double C = __dadd_rn(S.t, T.s);
+  PseudoQuad V = Fast2Sum(S.s, C);
+  double W = __dadd_rn(T.t, V.t);
+  PseudoQuad R = Fast2Sum(V.s, W);
   return R;
 }
 
