@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ -z $1 ] || [ -z $2 ] || [ -z $3 ] || [ -z $4 ] || [ -z $4 ]; then
+if [ -z $1 ] || [ -z $2 ] || [ -z $3 ] || [ -z $4 ]; then
     echo "Usage: $0 [tsmttsm/tsmm] <types> <xrange> <yrange>"
     exit
 fi

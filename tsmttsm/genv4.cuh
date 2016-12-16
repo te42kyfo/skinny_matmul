@@ -74,7 +74,7 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
     blockCount = M * N / 256 + 1;
   }
 
-  cudaMemset(d_temp_storage, 0, 100 * 100 * 1000 * sizeof(dtype));
+  cudaMemset(d_temp_storage, 0, M * N * blockCount * sizeof(dtype));
 
   GENV4::blockProductKernel<T, M, N, 256><<<blockCount, 256>>>(
       A, B, (T *)d_temp_storage, K, lda, ldb, ldc);

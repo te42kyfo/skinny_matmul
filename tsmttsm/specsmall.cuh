@@ -6,26 +6,27 @@
 
 namespace SPECSMALL {
 
-template <typename T, int M, int N>
-__global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
-                             int blockCount, size_t lda, size_t ldb,
-                             size_t ldc) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+template <typename T, typename iT, int M, int N>
+__global__ void deviceReduce(iT *blockResults, T *result, T alpha, T beta,
+                             int blockCount, int lda, int ldb, int ldc) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   if (tidx >= M * N) return;
   int n = tidx / M;
   int m = tidx % M;
 
-  T sum;
+  iT sum;
   zero(sum);
   for (int i = 0; i < blockCount; i++) {
     sum = accu(sum, blockResults[i * N * ldc + n * ldc + m]);
   }
 
-  result[n * ldc + m] = axpby(result[n * ldc + m], sum, beta, alpha);
+  result[n * ldc + m] = accu(scale(result[n * ldc + m], beta),
+                             convert<iT, T>(scale2(renormalize(sum), alpha)));
 }
 
-template <typename T, int M, int N, int BLOCKSIZE, bool TRANSPOSE, bool SELF>
-__global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
+template <typename T, typename iT, int M, int N, int BLOCKSIZE, bool TRANSPOSE,
+          bool SELF>
+__global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
                                    const int lda, const int ldb,
                                    const int ldc) {
   int tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -38,11 +39,13 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
     m = warpLane % M;
   }
 
-  __shared__ T blockStorage[BLOCKSIZE];
+  __shared__ iT blockStorage[BLOCKSIZE];
+  T *rowCache = reinterpret_cast<T *>(blockStorage);
 
   zero(blockStorage[threadIdx.x]);
+  __syncthreads();
 
-  T threadSum[N];
+  iT threadSum[N];
   for (int n = 0; n < N; n++) {
     zero(threadSum[n]);
   }
@@ -51,13 +54,14 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
        idx += blockDim.x * gridDim.x / 32 * rowsPerWarp) {
     T av = A[idx * lda + m];
     if (!SELF) {
-      blockStorage[threadIdx.x] = B[idx * ldb + m];
+      rowCache[threadIdx.x] = B[idx * ldb + m];
     } else {
-      blockStorage[threadIdx.x] = av;
+      rowCache[threadIdx.x] = av;
     }
+
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
-      threadSum[n] = axpy(threadSum[n], av, blockStorage[localAddress + n]);
+      threadSum[n] = axpy2(threadSum[n], av, rowCache[localAddress + n]);
     }
   }
 
@@ -67,13 +71,14 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
     __syncthreads();
 
     if (threadIdx.x < M) {
-      T blockSum;
+      iT blockSum;
       zero(blockSum);
       for (int w = 0; w < BLOCKSIZE / 32; w++) {
         for (int wp = threadIdx.x; wp < rowsPerWarp * M; wp += M) {
           blockSum = accu(blockSum, blockStorage[w * 32 + wp]);
         }
       }
+
       if (TRANSPOSE) {
         out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
       } else {
@@ -85,36 +90,36 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, const int K,
 
 void *d_temp_storage = NULL;
 
-template <typename T, int M, int N>
+template <typename T, typename iT, int M, int N>
 bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N) return false;
   if (varM > 32 || varN > 32) return false;
   if (d_temp_storage == NULL)
-    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
+    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(iT) * 100 * 100 * 1000));
   if (blockCount * M * N > 100 * 100 * 1000) return false;
 
   int const blocksize = 256;
 
   if (N > M) {
-    SPECSMALL::blockProductKernel<T, N, M, blocksize, true,
+    SPECSMALL::blockProductKernel<T, iT, N, M, blocksize, true,
                                   false><<<blockCount, blocksize>>>(
-        B, A, (T *)d_temp_storage, K, ldb, lda, ldc);
+        B, A, (iT *)d_temp_storage, K, ldb, lda, ldc);
 
   } else {
     if (M == N && A == B) {
-      SPECSMALL::blockProductKernel<T, M, N, blocksize, false,
+      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false,
                                     true><<<blockCount, blocksize>>>(
-          A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
+          A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     } else {
-      SPECSMALL::blockProductKernel<T, M, N, blocksize, false,
+      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false,
                                     false><<<blockCount, blocksize>>>(
-          A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
+          A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     }
   }
-  SPECSMALL::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
-      (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  SPECSMALL::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
+      (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }
 }

@@ -19,22 +19,20 @@
 
 using namespace std;
 
-#define XSTR(s) STR(s)
-#define STR(s) #s
-
-double dtime() {
-  double tseconds = 0;
-  struct timeval t;
-  gettimeofday(&t, NULL);
-  tseconds = (double)t.tv_sec + (double)t.tv_usec * 1.0e-6;
-  return tseconds;
-}
+#ifdef TSMM
+bool tsmttsm_mode = false;
+bool tsmm_mode = true;
+#endif
+#ifdef TSMTTSM
+bool tsmttsm_mode = true;
+bool tsmm_mode = false;
+#endif
 
 void printMatrix(const vector<htype>& m1, const vector<htype>& m2, size_t N1,
                  size_t N2, size_t stride, size_t position = 0,
                  string matchColor = "\e[32m",
                  string mismatchColor = "\e[31m") {
-  const size_t range = 5;
+  const size_t range = 10;
   size_t n1 = position < range ? 0 : position - range;
   cout << " - " << n1 << " - \n";
 
@@ -63,7 +61,7 @@ dtype *A_clean, *B_clean, *C_clean;
 dtype *A_dirty, *B_dirty, *C_dirty;
 dtype* temp_storage;
 
-void initMatmul(int lda, int ldb, int ldc) {
+void initMatmul() {
   hA = vector<htype>(totalA);
   hB = vector<htype>(totalB);
   hC = vector<htype>(totalC);
@@ -121,29 +119,22 @@ bool cleanMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
       cudaMemcpy(B_dirty, B_clean, sizeof(htype) * totalB, cudaMemcpyDefault));
   GPU_ERROR(
       cudaMemcpy(C_dirty, C_clean, sizeof(htype) * totalC, cudaMemcpyDefault));
-  dtype dalpha = makeDtype(2.0);
+  dtype dalpha = makeDtype(1.0);
   dtype dbeta = makeDtype(beta);
   bool result;
 
-#ifdef TSMM
-  if (self) {
-    result = matmulFunction(blockCount, M, N, K, C_dirty, ldc, dalpha, B_dirty,
-                            ldb, dbeta, C_dirty, ldc);
-  } else {
+  if (!self) {
     result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, B_dirty,
                             ldb, dbeta, C_dirty, ldc);
-  }
-#endif
-
-#ifdef TSMTTSM
-  if (self && M == N) {
+  } else if (tsmm_mode) {
+    result = matmulFunction(blockCount, M, N, K, C_dirty, ldc, dalpha, B_dirty,
+                            ldb, dbeta, C_dirty, ldc);
+  } else if (M == N) {
     result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, A_dirty,
                             lda, dbeta, C_dirty, ldc);
   } else {
-    result = matmulFunction(blockCount, M, N, K, A_dirty, lda, dalpha, B_dirty,
-                            ldb, dbeta, C_dirty, ldc);
+    result = false;
   }
-#endif
 
   GPU_ERROR(cudaMemcpy(resultDest.data(), C_dirty, sizeof(htype) * totalC,
                        cudaMemcpyDefault));
@@ -188,9 +179,9 @@ TESTRESULT testMatmul(MatmulFunctionType matmulFunction,
              << " ";
 #ifdef VERBOSE_ERRORS
         cout << "\n";
-        printMatrix(hC_test, hC_reference, C2, C1, ldc, c1);
+        printMatrix(hC_test, hC_reference, C1, C2, ldc, c1);
         cout << "\n--\n";
-        printMatrix(hC_reference, hC_reference, C2, C1, ldc, c1);
+        printMatrix(hC_reference, hC_reference, C1, C2, ldc, c1);
         cout << "--\n\n";
         cout << K << " Rows\n";
 #endif
@@ -233,73 +224,70 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  int maxK = 0.05 * ((size_t)1 << 30) / 208 / (2 * sizeof(dtype));
-  totalA = maxK * 104;
+  size_t maxMatrixSize = 0.1 * ((size_t)1 << 30) / (2 * sizeof(dtype));
+  totalA = maxMatrixSize;
 
 #ifdef TSMM
   auto versions = getEnabledTSMMVersions();
   MatmulFunctionType referenceFunction = tsmm_cublas<dtype>;
   totalB = 104 * 104;
-  totalC = maxK * 104;
-  initMatmul(104, 104, 104);
+  totalC = maxMatrixSize;
 #endif
 #ifdef TSMTTSM
   auto versions = getEnabledTSMTTSMVersions();
   MatmulFunctionType referenceFunction = tsmttsm_cublas<dtype>;
-  totalB = maxK * 104;
+  totalB = maxMatrixSize;
   totalC = 104 * 104;
-  initMatmul(104, 104, 104);
 #endif
+  initMatmul();
 
   random_device r;
   default_random_engine gen(r());
   uniform_int_distribution<int> dis(0, 4);
 
-  int sampleSize = 2;
+  int sampleSize = 1000;
 
   for (int M = m1; M <= m2; M++) {
     for (int N = n1; N <= n2; N++) {
       if (n1 == 0 && n2 == 0) N = M;
 
       for (const auto& matmulVersion : versions) {
-        cout << M << "xKx" << N << "  " << matmulVersion.second << " " << mode
+        cout << M << "xKx" << N << "  " << matmulVersion.second << " " << types
              << " ";
         bool passed = true;
 
         for (int self = 0; self <= 1; self++) {
           for (htype beta = 0.0; beta <= 1.0; beta += 1.0) {
             for (int t = 0; t < sampleSize; t++) {
-              for (int blockCount = 1 * 13; blockCount <= 8 * 13;
-                   blockCount += 13) {
+              int blockCount = uniform_int_distribution<int>(1, 200)(gen);
+              size_t lda = M + dis(gen);
 #ifdef TSMM
-                size_t lda = M + dis(gen);
-                size_t ldb = M + dis(gen);
-                size_t ldc = (self == 1 ? max(N + dis(gen), M) : N + dis(gen));
-                size_t K = maxK / (lda + ldc);
+              size_t ldb = M + dis(gen);
+              size_t ldc = (self == 1 ? max(N + dis(gen), M) : N + dis(gen));
+              size_t K = maxMatrixSize / max(lda, ldc);
 #endif
 #ifdef TSMTTSM
-                size_t lda = M + dis(gen);
-                size_t ldb = N + dis(gen);
-                size_t ldc = M + dis(gen);
-                size_t K = maxK / (lda + ldb);
+              size_t ldb = N + dis(gen);
+              size_t ldc = M + dis(gen);
+              size_t K = maxMatrixSize / max(lda, ldb);
 #endif
-                auto result =
-                    testMatmul(matmulVersion.first, referenceFunction, M, N, K,
-                               lda, ldb, ldc, blockCount, (self == 1), beta);
-                if (result == TESTRESULT::PASS) {
-                  cout << "#";
-                  passed &= true;
-                }
-                if (result == TESTRESULT::SKIP) {
-                  cout << "\e[35m-\e[0m";
-                  passed &= true;
-                }
-                if (result == TESTRESULT::FAIL) {
-                  cout << "\e[31mX\e[0m";
-                  passed &= false;
-                }
-                cout.flush();
+              K = uniform_int_distribution<int>(1, K)(gen);
+              auto result =
+                  testMatmul(matmulVersion.first, referenceFunction, M, N, K,
+                             lda, ldb, ldc, blockCount, (self == 1), beta);
+              if (result == TESTRESULT::PASS) {
+                cout << "#";
+                passed &= true;
               }
+              if (result == TESTRESULT::SKIP) {
+                cout << "\e[35m-\e[0m";
+                passed &= true;
+              }
+              if (result == TESTRESULT::FAIL) {
+                cout << "\e[31mX\e[0m";
+                passed &= false;
+              }
+              cout.flush();
             }
           }
         }

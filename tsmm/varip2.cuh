@@ -10,7 +10,7 @@ static __global__ void __launch_bounds__(256, 8)
   int n = tidx % N;
 
   int row = tidx / N;
-  if (row > K) return;
+  if (row >= K) return;
   //  for (int row = tidx / N; row < K; row += gridDim.x * blockDim.x / N) {
   T sum;
   zero(sum);
@@ -34,7 +34,7 @@ bool tsmm_varip2(const size_t blockCount, const int varM, const int varN,
                  const int K, const T *A, const int lda, const T alpha,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   const int threadsPerBlock = (256 / varN) * varN;
-  int newBlockCount = (K * varN / threadsPerBlock / 13 + 1) * 13;
+  int newBlockCount = K * varN / threadsPerBlock + 1;
 
   T Tzero;
   zero(Tzero);
