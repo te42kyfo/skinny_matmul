@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
   vector<double> hda(N);
   vector<double> hdb(N);
   vector<double> hdc(1);
-  vector<PseudoQuad> hpqc(1);
+  vector<double> hpqc(1);
   double* dda;
   double* ddb;
   double* ddc;
@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
   GPU_ERROR(cudaMalloc(&dda, sizeof(double) * N));
   GPU_ERROR(cudaMalloc(&ddb, sizeof(double) * N));
   GPU_ERROR(cudaMalloc(&ddc, sizeof(double) * 1));
-  GPU_ERROR(cudaMalloc(&dpqc, sizeof(PseudoQuad) * 1));
+  GPU_ERROR(cudaMalloc(&dpqc, sizeof(double) * 1));
 
   double bigVal = ((uint64_t)1 << 52);
   bigVal *= 1024;
@@ -45,6 +45,8 @@ int main(int argc, char** argv) {
     hdb[i] = smallVal2;
   }
   hda[0] = bigVal;
+  hda[1234] = bigVal;
+  hda[41234] = -bigVal;
   hda[N - 1] = bigVal;
 
   hdb[0] = bigVal;
@@ -53,13 +55,19 @@ int main(int argc, char** argv) {
   GPU_ERROR(cudaMemcpy(dda, hda.data(), N * sizeof(double), cudaMemcpyDefault));
   GPU_ERROR(cudaMemcpy(ddb, hdb.data(), N * sizeof(double), cudaMemcpyDefault));
 
-  GENV3::tsmttsm<double, PseudoQuad, 1, 1>(54, 1, 1, N, dda, 1, 1.0, ddb, 1, 0.0,
-                                       ddc, 1);
+  SPECSMALL::tsmttsm<double, double, 1, 1>(1000, 1, 1, N, dda, 1, 1.0, ddb, 1,
+                                           0.0, ddc, 1);
+  SPECSMALL::tsmttsm<double, PseudoQuad, 1, 1>(1000, 1, 1, N, dda, 1, 1.0, ddb, 1,
+                                               0.0, dpqc, 1);
 
   GPU_ERROR(cudaMemcpy(hdc.data(), ddc, sizeof(double), cudaMemcpyDefault));
-  cout << hdc[0] << "   ";
+  GPU_ERROR(cudaMemcpy(hpqc.data(), dpqc, sizeof(double), cudaMemcpyDefault));
+  cout << "Double:     " << hdc[0] << "   ";
   dispSplit(hdc[0]);
 
-  cout << smallVal1 * smallVal2 * (N-2) << "   ";
-  dispSplit(smallVal1 * smallVal2 * (N-2));
+  cout << "PseudoQuad: " << hpqc[0] << "   ";
+  dispSplit(hpqc[0]);
+
+  cout << "Should be:  " << smallVal1 * smallVal2 * (N - 2) << "   ";
+  dispSplit(smallVal1 * smallVal2 * (N - 2));
 }
