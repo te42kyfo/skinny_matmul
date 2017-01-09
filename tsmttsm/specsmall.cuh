@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <iostream>
+#include "../PseudoQuad.cuh"
 #include "../cu_complex.h"
 
 namespace SPECSMALL {

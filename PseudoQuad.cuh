@@ -1,3 +1,5 @@
+#pragma once
+
 #include "cu_complex.h"
 
 struct PseudoQuad {
