@@ -1,3 +1,6 @@
+#include <omp.h>
+#include <algorithm>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <random>
@@ -35,9 +38,9 @@ void printMat(double* d, int M, int N) {
   }
 }
 
-enum class TSM_TYPE { BLAS, TSMFastAxpy, TSMSlowAxpy };
+enum class TSMTTSM_TYPE { BLAS, SPEC };
 
-template <int M, typename iT, TSM_TYPE tsmType>
+template <int M, typename iT, TSMTTSM_TYPE tsmttsmType>
 void svqb(double* dW, double* dS, double* dQ, int K) {
   const int blockCount = 52;
   vector<double> hdinv(M);
@@ -47,15 +50,12 @@ void svqb(double* dW, double* dS, double* dQ, int K) {
 
   vector<double> hL(M);
 
-  if (tsmType == TSM_TYPE::BLAS)
+  if (tsmttsmType == TSMTTSM_TYPE::BLAS)
     magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dW, M, dW, M, 0.0, dS,
                 M);
-  else if (tsmType == TSM_TYPE::TSMFastAxpy)
-    SPECSMALL::tsmttsm<double, iT, M, M, SPECSMALL::AXPY_TYPE::fastAXPY>(
-        blockCount, M, M, K, dW, M, 1.0, dW, M, 0.0, dS, M);
-  else
-    SPECSMALL::tsmttsm<double, iT, M, M, SPECSMALL::AXPY_TYPE::slowAXPY>(
-        blockCount, M, M, K, dW, M, 1.0, dW, M, 0.0, dS, M);
+  else if (tsmttsmType == TSMTTSM_TYPE::SPEC)
+    SPECSMALL::tsmttsm<double, iT, M, M>(blockCount, M, M, K, dW, M, 1.0, dW, M,
+                                         0.0, dS, M);
 
   GPU_ERROR(cudaMemcpy(hS.data(), dS,
                        hS.size() * sizeof(decltype(hS)::value_type),
@@ -86,7 +86,7 @@ void svqb(double* dW, double* dS, double* dQ, int K) {
                        hS.size() * sizeof(decltype(hS)::value_type),
                        cudaMemcpyDefault));
   // GPU Part
-  if (tsmType == TSM_TYPE::BLAS)
+  if (tsmttsmType == TSMTTSM_TYPE::BLAS)
     magma_dgemm(MagmaTrans, MagmaNoTrans, M, K, M, 1.0, dS, M, dW, M, 0.0, dQ,
                 M);
   else
@@ -98,11 +98,12 @@ template <bool PQ, int M>
 double getL2Error(double* dQ, int K) {
   vector<double> hS(M * M);
   auto dS = cudaCreateAndUpload(hS);
-  /*  if (PQ) {
-    SPECSMALL::tsmttsm<double, PseudoQuad, M, M>(52, M, M, K, dQ, M, 1.0, dQ, M,
-                                                 0.0, dS, M);
-                                                 } else {*/
-  magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dQ, M, dQ, M, 0.0, dS, M);
+  // if (PQ) {
+  SPECSMALL::tsmttsm<double, PseudoQuad, M, M>(52, M, M, K, dQ, M, 1.0, dQ, M,
+                                               0.0, dS, M);
+  //                                                 } else {*/
+  // magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dQ, M, dQ, M, 0.0, dS,
+  // M);
   //}
 
   GPU_ERROR(cudaMemcpy(hS.data(), dS,
@@ -148,10 +149,23 @@ double getMaxError(double* dQ, int K) {
   return maxError;
 }
 
+void randInit(double* hW, int N, double pert) {
+#pragma omp parallel
+  {
+    random_device rd;
+    mt19937_64 re(rd() * omp_get_thread_num());
+    uniform_real_distribution<double> dis(-1.0, 1.0);
+#pragma omp for
+    for (int i = 0; i < N; i++) {
+      hW[i] = 1 + pert * dis(re);
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   magma_init();
 
-  const int maxK = 5000000;
+  const int maxK = 10000000;
   const int M = 8;
 
   vector<double> hW(maxK * M, 1.0);
@@ -159,33 +173,41 @@ int main(int argc, char** argv) {
   vector<double> hS(M * M);
 
   double pert = 0.00001;
-  random_device rd;
-  mt19937_64 re(rd());
-  uniform_real_distribution<double> dis(-1.0, 1.0);
-
-  for (int i = 0; i < M * maxK; i++) {
-    hW[i] += pert * dis(re);
-  }
 
   auto dW = cudaCreateAndUpload(hW);
   auto dS = cudaCreateAndUpload(hS);
   auto dQ = cudaCreateAndUpload(hQ);
 
-  cout.precision(400);
+  cout.precision(4);
 
-  for (int K = 8; K < maxK; K *= 2) {
-    cout << "\n" << K << "\n";
+  using SVQBFunctionType =
+      std::function<void(double*, double*, double*, int K)>;
 
-    svqb<M, double, TSM_TYPE::BLAS>(dW, dS, dQ, K);
-    cout << "BLAS D  L2: " << getL2Error<false, M>(dQ, K) << "\n";
+  vector<tuple<string, SVQBFunctionType, vector<double>>> svqbFunctions;
+  svqbFunctions.push_back(make_tuple(
+      "SPEC PQ", svqb<M, PseudoQuad, TSMTTSM_TYPE::SPEC>, vector<double>()));
+  svqbFunctions.push_back(make_tuple(
+      "SPEC D", svqb<M, double, TSMTTSM_TYPE::SPEC>, vector<double>()));
+  svqbFunctions.push_back(make_tuple(
+      "BLAS D", svqb<M, double, TSMTTSM_TYPE::BLAS>, vector<double>()));
 
-    svqb<M, double, TSM_TYPE::TSMFastAxpy>(dW, dS, dQ, K);
-    cout << "TSM D   L2: " << getL2Error<false, M>(dQ, K) << "\n";
+  int K = maxK;
+  cout << "\n" << K << "\n";
+  for (int i = 0; i < 10; i++) {
+    randInit(hW.data(), M * K, pert);
+    GPU_ERROR(
+        cudaMemcpy(dW, hW.data(), M * K * sizeof(double), cudaMemcpyDefault));
 
-    svqb<M, PseudoQuad, TSM_TYPE::TSMFastAxpy>(dW, dS, dQ, K);
-    cout << "TSM fPQ L2: " << getL2Error<false, M>(dQ, K) << "\n";
-
-    svqb<M, PseudoQuad, TSM_TYPE::TSMSlowAxpy>(dW, dS, dQ, K);
-    cout << "TSM sPQ L2: " << getL2Error<false, M>(dQ, K) << "\n";
+    for (auto& svqbFunc : svqbFunctions) {
+      get<1>(svqbFunc)(dW, dS, dQ, K);
+      get<2>(svqbFunc).push_back(getL2Error<true, M>(dQ, K));
+    }
+    cout << ".";
+    cout.flush();
+  }
+  cout << "\n";
+  for (auto& svqbFunc : svqbFunctions) {
+    double av = accumulate(begin(get<2>(svqbFunc)), end(get<2>(svqbFunc)), 0.0);
+    cout << get<0>(svqbFunc) << ": " << av / get<2>(svqbFunc).size() << "\n";
   }
 }

@@ -25,10 +25,8 @@ __global__ void deviceReduce(iT *blockResults, T *result, T alpha, T beta,
                              convert<iT, T>(scale2(renormalize(sum), alpha)));
 }
 
-enum class AXPY_TYPE { fastAXPY, slowAXPY };
-
 template <typename T, typename iT, int M, int N, int BLOCKSIZE, bool TRANSPOSE,
-          bool SELF, AXPY_TYPE axpyType>
+          bool SELF>
 __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
                                    const int lda, const int ldb,
                                    const int ldc) {
@@ -64,11 +62,7 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
 
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
-      if (axpyType == SPECSMALL::AXPY_TYPE::slowAXPY) {
-        threadSum[n] = slow_axpy2(threadSum[n], av, rowCache[localAddress + n]);
-      } else {
-        threadSum[n] = axpy2(threadSum[n], av, rowCache[localAddress + n]);
-      }
+      threadSum[n] = axpy2(threadSum[n], av, rowCache[localAddress + n]);
     }
   }
 
@@ -97,7 +91,7 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
 
 void *d_temp_storage = NULL;
 
-template <typename T, typename iT, int M, int N, AXPY_TYPE axpyType>
+template <typename T, typename iT, int M, int N>
 bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
@@ -110,18 +104,18 @@ bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
   int const blocksize = 256;
 
   if (N > M) {
-    SPECSMALL::blockProductKernel<T, iT, N, M, blocksize, true, false,
-                                  axpyType><<<blockCount, blocksize>>>(
+    SPECSMALL::blockProductKernel<T, iT, N, M, blocksize, true,
+                                  false><<<blockCount, blocksize>>>(
         B, A, (iT *)d_temp_storage, K, ldb, lda, ldc);
 
   } else {
     if (M == N && A == B) {
-      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false, true,
-                                    axpyType><<<blockCount, blocksize>>>(
+      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false,
+                                    true><<<blockCount, blocksize>>>(
           A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     } else {
-      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false, false,
-                                    axpyType><<<blockCount, blocksize>>>(
+      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false,
+                                    false><<<blockCount, blocksize>>>(
           A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     }
   }
