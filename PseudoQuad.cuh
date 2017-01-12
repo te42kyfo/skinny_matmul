@@ -107,6 +107,16 @@ __device__ PseudoQuad axpy2(PseudoQuad C, double A, double B) {
   return R;
 }
 
+template <typename T>
+__device__ T slow_axpy2(T C, double A, double B) {
+  return C + A * B;
+}
+template <>
+__device__ PseudoQuad slow_axpy2(PseudoQuad C, double A, double B) {
+  PseudoQuad ab = FMA2Mult(A, B);
+  return accu(C, ab);
+}
+
 template <>
 __device__ PseudoQuad axpy(PseudoQuad C, PseudoQuad A, double B) {
   PseudoQuad XIJ = FMA2Mult(A.s, B);
