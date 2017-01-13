@@ -17,6 +17,31 @@
 
 using namespace std;
 
+#include "mblas_dd.h"
+#include "mblas_qd.h"
+using HP_TYPE = dd_real;
+
+void WTW(double* dW, double* dS, int M, int K) {
+  vector<double> hW(M * K);
+  vector<double> hS(M * M);
+  vector<HP_TYPE> hpW(M * K);
+  vector<HP_TYPE> hpS(M * M);
+  GPU_ERROR(
+      cudaMemcpy(hW.data(), dW, M * K * sizeof(double), cudaMemcpyDefault));
+  for (int i = 0; i < M * K; i++) {
+    hpW[i] = hW[i];
+  }
+
+  Rgemm("n", "t", M, M, K, 1.0, hpW.data(), M, hpW.data(), M, 0.0, hpS.data(),
+        M);
+
+  for (int i = 0; i < M * M; i++) {
+    hS[i] = hpS[i].x[0];
+  }
+  GPU_ERROR(
+      cudaMemcpy(dS, hS.data(), M * M * sizeof(double), cudaMemcpyDefault));
+}
+
 template <typename T>
 T* cudaCreateAndUpload(const vector<T>& hmem) {
   T* resPtr = NULL;
@@ -38,7 +63,7 @@ void printMat(double* d, int M, int N) {
   }
 }
 
-enum class TSMTTSM_TYPE { BLAS, SPEC };
+enum class TSMTTSM_TYPE { BLAS, SPEC, MPACK_DD };
 
 template <int M, typename iT, TSMTTSM_TYPE tsmttsmType>
 void svqb(double* dW, double* dS, double* dQ, int K) {
@@ -56,6 +81,8 @@ void svqb(double* dW, double* dS, double* dQ, int K) {
   else if (tsmttsmType == TSMTTSM_TYPE::SPEC)
     SPECSMALL::tsmttsm<double, iT, M, M>(blockCount, M, M, K, dW, M, 1.0, dW, M,
                                          0.0, dS, M);
+  else if (tsmttsmType == TSMTTSM_TYPE::MPACK_DD)
+    WTW(dW, dS, M, K);
 
   GPU_ERROR(cudaMemcpy(hS.data(), dS,
                        hS.size() * sizeof(decltype(hS)::value_type),
@@ -165,14 +192,14 @@ void randInit(double* hW, int N, double pert) {
 int main(int argc, char** argv) {
   magma_init();
 
-  const int maxK = 10000000;
+  const int maxK = 1000000;
   const int M = 8;
 
   vector<double> hW(maxK * M, 1.0);
   vector<double> hQ(maxK * M);
   vector<double> hS(M * M);
 
-  double pert = 0.00001;
+  double pert = 0.000001;
 
   auto dW = cudaCreateAndUpload(hW);
   auto dS = cudaCreateAndUpload(hS);
@@ -190,6 +217,8 @@ int main(int argc, char** argv) {
       "SPEC D", svqb<M, double, TSMTTSM_TYPE::SPEC>, vector<double>()));
   svqbFunctions.push_back(make_tuple(
       "BLAS D", svqb<M, double, TSMTTSM_TYPE::BLAS>, vector<double>()));
+  svqbFunctions.push_back(make_tuple(
+      "MPACK DD", svqb<M, double, TSMTTSM_TYPE::MPACK_DD>, vector<double>()));
 
   int K = maxK;
   cout << "\n" << K << "\n";
