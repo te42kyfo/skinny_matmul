@@ -9,6 +9,7 @@
 #include "../dtime.hpp"
 #include "../gpu_error.cuh"
 #include "../tsmm/fix_blend.cuh"
+#include "../tsmttsm/gen_cublas.cuh"
 #include "../tsmttsm/specsmall.cuh"
 #include "../types.hpp"
 #define ADD_
@@ -18,9 +19,12 @@
 using namespace std;
 
 #include "mblas_dd.h"
+#include "mblas_double.h"
 #include "mblas_qd.h"
-using HP_TYPE = dd_real;
+#include "mlapack_dd.h"
+#include "mlapack_qd.h"
 
+template <typename HP_TYPE>
 void WTW(double* dW, double* dS, int M, int K) {
   vector<double> hW(M * K);
   vector<double> hS(M * M);
@@ -63,7 +67,7 @@ void printMat(double* d, int M, int N) {
   }
 }
 
-enum class TSMTTSM_TYPE { BLAS, SPEC, MPACK_DD };
+enum class TSMTTSM_TYPE { CUBLAS, BLAS, SPEC, MPACK_DD, MPACK_QD };
 
 template <int M, typename iT, TSMTTSM_TYPE tsmttsmType>
 void svqb(double* dW, double* dS, double* dQ, int K) {
@@ -78,11 +82,15 @@ void svqb(double* dW, double* dS, double* dQ, int K) {
   if (tsmttsmType == TSMTTSM_TYPE::BLAS)
     magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dW, M, dW, M, 0.0, dS,
                 M);
+  if (tsmttsmType == TSMTTSM_TYPE::CUBLAS)
+    tsmttsm_cublas<double>(blockCount, M, M, K, dW, M, 1.0, dW, M, 0.0, dS, M);
   else if (tsmttsmType == TSMTTSM_TYPE::SPEC)
     SPECSMALL::tsmttsm<double, iT, M, M>(blockCount, M, M, K, dW, M, 1.0, dW, M,
                                          0.0, dS, M);
   else if (tsmttsmType == TSMTTSM_TYPE::MPACK_DD)
-    WTW(dW, dS, M, K);
+    WTW<dd_real>(dW, dS, M, K);
+  else if (tsmttsmType == TSMTTSM_TYPE::MPACK_QD)
+    WTW<qd_real>(dW, dS, M, K);
 
   GPU_ERROR(cudaMemcpy(hS.data(), dS,
                        hS.size() * sizeof(decltype(hS)::value_type),
@@ -121,6 +129,56 @@ void svqb(double* dW, double* dS, double* dQ, int K) {
                                  dQ, M);
 }
 
+template <typename HP_TYPE>
+void svqb_xd(double* hW, double* hQ, int M, int K) {
+  vector<HP_TYPE> hpW(M * K);
+  vector<HP_TYPE> hpQ(M * K);
+  vector<HP_TYPE> hpS(M * M);
+  for (int i = 0; i < M * K; i++) {
+    hpW[i] = hW[i];
+  }
+
+  Rgemm("n", "t", M, M, K, 1.0, hpW.data(), M, hpW.data(), M, 0.0, hpS.data(),
+        M);
+
+  vector<HP_TYPE> hdinv(M);
+  for (int i = 0; i < M; i++) {
+    if (hpS[i * M + i] > 1.0e-15) {
+      hdinv[i] = 1.0 / sqrt(hpS[i * M + i]);
+    } else {
+      hdinv[i] = 0.0;
+    }
+  }
+  for (int n = 0; n < M; n++) {
+    for (int m = 0; m < M; m++) {
+      hpS[n * M + m] *= hdinv[n] * hdinv[m];
+    }
+  }
+  vector<HP_TYPE> hTemp(100 * M);
+  vector<mpackint> hiTemp(100);
+  vector<HP_TYPE> hL(M);
+
+  mpackint info = 0;
+
+  Rsyev("V", "U", M, hpS.data(), M, hL.data(), hTemp.data(), hTemp.size(),
+        &info);
+
+  for (int n = 0; n < M; n++) {
+    for (int m = 0; m < M; m++) {
+      if (hL[n] > 1.0e-15) {
+        hpS[n * M + m] *= hdinv[m] * (1.0 / sqrt(hL[n]));
+      } else {
+        hpS[n * M + m] = 0.0;
+      }
+    }
+  }
+  Rgemm("t", "n", M, K, M, 1.0, hpS.data(), M, hpW.data(), M, 0.0, hpQ.data(),
+        M);
+  for (int i = 0; i < M * K; i++) {
+    hQ[i] = hpQ[i].x[0];
+  }
+}
+
 template <bool PQ, int M>
 double getL2Error(double* dQ, int K) {
   vector<double> hS(M * M);
@@ -129,7 +187,8 @@ double getL2Error(double* dQ, int K) {
   SPECSMALL::tsmttsm<double, PseudoQuad, M, M>(52, M, M, K, dQ, M, 1.0, dQ, M,
                                                0.0, dS, M);
   //                                                 } else {*/
-  // magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dQ, M, dQ, M, 0.0, dS,
+  // magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dQ, M, dQ, M, 0.0,
+  // dS,
   // M);
   //}
 
@@ -146,7 +205,7 @@ double getL2Error(double* dQ, int K) {
     }
   }
   GPU_ERROR(cudaFree(dS));
-  return l2;
+  return sqrt(l2);
 }
 
 template <bool PQ, int M>
@@ -154,7 +213,8 @@ double getMaxError(double* dQ, int K) {
   vector<double> hS(M * M);
   auto dS = cudaCreateAndUpload(hS);
   /*  if (PQ) {
-    SPECSMALL::tsmttsm<double, PseudoQuad, M, M>(52, M, M, K, dQ, M, 1.0, dQ, M,
+    SPECSMALL::tsmttsm<double, PseudoQuad, M, M>(52, M, M, K, dQ, M, 1.0, dQ,
+    M,
                                                  0.0, dS, M);
                                                  } else {*/
   magma_dgemm(MagmaNoTrans, MagmaTrans, M, M, K, 1.0, dQ, M, dQ, M, 0.0, dS, M);
@@ -184,7 +244,7 @@ void randInit(double* hW, int N, double pert) {
     uniform_real_distribution<double> dis(-1.0, 1.0);
 #pragma omp for
     for (int i = 0; i < N; i++) {
-      hW[i] = 1 + pert * dis(re);
+      hW[i] = 1.0 + pert * dis(re);
     }
   }
 }
@@ -192,14 +252,14 @@ void randInit(double* hW, int N, double pert) {
 int main(int argc, char** argv) {
   magma_init();
 
-  const int maxK = 1000000;
+  const int maxK = 10000000;
   const int M = 8;
 
   vector<double> hW(maxK * M, 1.0);
   vector<double> hQ(maxK * M);
   vector<double> hS(M * M);
 
-  double pert = 0.000001;
+  double pert = 0.0001;
 
   auto dW = cudaCreateAndUpload(hW);
   auto dS = cudaCreateAndUpload(hS);
@@ -212,13 +272,21 @@ int main(int argc, char** argv) {
 
   vector<tuple<string, SVQBFunctionType, vector<double>>> svqbFunctions;
   svqbFunctions.push_back(make_tuple(
-      "SPEC PQ", svqb<M, PseudoQuad, TSMTTSM_TYPE::SPEC>, vector<double>()));
+      "MAGMA D", svqb<M, double, TSMTTSM_TYPE::BLAS>, vector<double>()));
+  svqbFunctions.push_back(make_tuple(
+      "CUBLAS D", svqb<M, double, TSMTTSM_TYPE::BLAS>, vector<double>()));
+  svqbFunctions.push_back(make_tuple(
+      "SPEC F", svqb<M, float, TSMTTSM_TYPE::SPEC>, vector<double>()));
   svqbFunctions.push_back(make_tuple(
       "SPEC D", svqb<M, double, TSMTTSM_TYPE::SPEC>, vector<double>()));
   svqbFunctions.push_back(make_tuple(
-      "BLAS D", svqb<M, double, TSMTTSM_TYPE::BLAS>, vector<double>()));
-  svqbFunctions.push_back(make_tuple(
-      "MPACK DD", svqb<M, double, TSMTTSM_TYPE::MPACK_DD>, vector<double>()));
+      "SPEC PQ", svqb<M, PseudoQuad, TSMTTSM_TYPE::SPEC>, vector<double>()));
+  // svqbFunctions.push_back(make_tuple(
+  //    "MPACK DD", svqb<M, double, TSMTTSM_TYPE::MPACK_DD>, vector<double>()));
+  // svqbFunctions.push_back(make_tuple(
+  //    "MPACK QD", svqb<M, double, TSMTTSM_TYPE::MPACK_QD>, vector<double>()));
+
+  vector<double> svqb_xd_data;
 
   int K = maxK;
   cout << "\n" << K << "\n";
@@ -231,12 +299,19 @@ int main(int argc, char** argv) {
       get<1>(svqbFunc)(dW, dS, dQ, K);
       get<2>(svqbFunc).push_back(getL2Error<true, M>(dQ, K));
     }
-    cout << ".";
-    cout.flush();
+
+    svqb_xd<dd_real>(hW.data(), hQ.data(), M, K);
+    GPU_ERROR(
+        cudaMemcpy(dQ, hQ.data(), M * K * sizeof(double), cudaMemcpyDefault));
+
+    svqb_xd_data.push_back(getL2Error<true, M>(dQ, K));
   }
   cout << "\n";
   for (auto& svqbFunc : svqbFunctions) {
     double av = accumulate(begin(get<2>(svqbFunc)), end(get<2>(svqbFunc)), 0.0);
     cout << get<0>(svqbFunc) << ": " << av / get<2>(svqbFunc).size() << "\n";
   }
+  double av = accumulate(begin(svqb_xd_data), end(svqb_xd_data), 0.0);
+  cout << "MPACK FULL QD"
+       << ": " << av << "\n";
 }
