@@ -17,7 +17,11 @@
 #include "tsmm/varip3.cuh"
 #include "tsmm/varip_blend.cuh"
 #include "tsmttsm/gen_cublas.cuh"
+#ifdef MAGMA
 #include "tsmttsm/gen_magma.cuh"
+#endif
+#include "tsmttsm/reduceonly.cuh"
+
 #ifdef FIX_GENV1
 #include "tsmttsm/genv1.cuh"
 #endif
@@ -111,6 +115,9 @@ getEnabledTSMTTSMVersions() {
 #endif
 #ifdef FIX_SPECSMALL
   versions.push_back({SPECSMALL::tsmttsm<dtype, dItype, PARM, PARN>, "FSMALL"});
+#endif
+#ifdef FIX_REDUCEONLY
+  versions.push_back({REDUCEONLY::tsmttsm<dtype, dItype, PARM, PARN>, "FREDUC"});
 #endif
 #endif
   return versions;
