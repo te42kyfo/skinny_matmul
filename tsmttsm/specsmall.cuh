@@ -40,7 +40,7 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
     m = warpLane % M;
   }
 
-  __shared__ iT blockStorage[BLOCKSIZE];
+  __shared__ iT blockStorage[BLOCKSIZE * (sizeof(T) > sizeof(iT) ? 2 : 1)];
   T *rowCache = reinterpret_cast<T *>(blockStorage);
 
   zero(blockStorage[threadIdx.x]);
