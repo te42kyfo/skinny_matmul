@@ -3,16 +3,16 @@ NVCC := nvcc
 # internal flags
 NVCCFLAGS   := -std=c++11 -O3 -arch=sm_35 --compiler-options="-O2 -pipe -Wall -fopenmp -g" -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable" #  -Xptxas="-v"
 CCFLAGS     :=
-LDFLAGS     := -L/opt/cuda/lib64 -L../magma/lib/ -lcublas -lmagma
+LDFLAGS     := -L/opt/cuda/lib64 -L../magma/lib/ -lcublas
 INCLUDES 	:= -I../magma/include
 M 			:= 1
 N			:= 1
 TSMM_VERSIONS 		:= #-DVARIP1 -DVARIP2 -DVARIP3 -DVARIP_BLEND
-TSMTTSM_VERSIONS 	:= -DFIX_GENV3 -DMAGMA -DCUBLAS 
+TSMTTSM_VERSIONS 	:= -DFIX_GENV32T -DFIX_GENV33T
 TYPES 		:= DR
 MULTYPE		:= TSMTTSM
 CONSTANTS	:= -DPARM=$M -DPARN=$N -D$(MULTYPE)=1 -D$(TYPES)=1 $(TSMTTSM_VERSIONS) $(TSMM_VERSIONS) -DVERBOSE_ERRORS
-PREFIX		:= .
+PREFIX		:= ./build/
 
 NAME 		:= -$(MULTYPE)-$M-$N-$(TYPES)
 
@@ -32,3 +32,9 @@ sqlite3.o: sqlite3.c sqlite3.h
 
 numeric_tests: numeric_tests.cu *.cuh tsmttsm/*.cuh tsmm/*.cuh Makefile versions.hpp
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS)
+
+clean:
+	rm -f ./build/perf-TSMTTSM-*
+	rm -f ./build/perf-TSMM-*
+	rm -f ./build/test-TSMTTSM-*
+	rm -f ./build/test-TSMM-*
