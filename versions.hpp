@@ -17,7 +17,9 @@
 #include "tsmm/varip3.cuh"
 #include "tsmm/varip_blend.cuh"
 #include "tsmttsm/gen_cublas.cuh"
+#ifdef FIX_GENV1
 #include "tsmttsm/genv1.cuh"
+#endif
 #include "tsmttsm/genv3.cuh"
 #include "tsmttsm/genv32.cuh"
 #include "tsmttsm/genv3x.cuh"

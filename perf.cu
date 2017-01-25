@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  size_t maxMatrixSize = 1 * ((size_t)1 << 30) / (2 * sizeof(dtype));
+  size_t maxMatrixSize = 8 * ((size_t)1 << 30) / (2 * sizeof(dtype));
   totalA = maxMatrixSize;
 
 #ifdef TSMM
@@ -162,15 +162,16 @@ int main(int argc, char** argv) {
 
       for (auto matmulVersion : versions) {
         size_t K = 200;
-        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount, 1,
-                      false, -1.0);
-        double resultTime = measureMatmul(matmulVersion.first, M, N, K, lda,
-                                          ldb, ldc, smCount, 1, false, -1.0);
+        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount * 4,
+                      1, false, -1.0);
+        double resultTime =
+            measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
+                          smCount * 4, 1, false, -1.0);
 
         while (resultTime > 0 && resultTime < 0.01 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
-                                     ldc, smCount, 1, false, -1.0);
+                                     ldc, smCount * 4, 1, false, -1.0);
         }
         for (int self = 0; self <= (M == N || tsmm_mode ? 1 : 0); self++) {
           if (self == 1 && tsmm_mode) ldc = max(M, N);
