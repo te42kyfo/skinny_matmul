@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include "types.hpp"
-
+#ifdef TSMM
 #include "tsmm/cublas.cuh"
 #include "tsmm/fix1.cuh"
 #include "tsmm/fix2.cuh"
@@ -16,6 +16,12 @@
 #include "tsmm/varip2.cuh"
 #include "tsmm/varip3.cuh"
 #include "tsmm/varip_blend.cuh"
+#endif
+#ifdef TSMTTSM
+#ifdef MAGMA
+#include "tsmttsm/gen_magma.cuh"
+#endif
+// #include "tsmttsm/reduceonly.cuh"
 #include "tsmttsm/gen_cublas.cuh"
 #ifdef FIX_GENV1
 #include "tsmttsm/genv1.cuh"
@@ -27,11 +33,13 @@
 #include "tsmttsm/genv5.cuh"
 #include "tsmttsm/genv6.cuh"
 #include "tsmttsm/specsmall.cuh"
+#endif
 
 using MatmulFunctionType = std::function<bool(
     const size_t, const int, const int, const int, const dtype*, const int,
     const dtype, const dtype*, const int, const dtype, dtype*, const int)>;
 
+#ifdef TSMM
 std::vector<std::pair<MatmulFunctionType, std::string>>
 getEnabledTSMMVersions() {
   std::vector<std::pair<MatmulFunctionType, std::string>> versions;
@@ -76,7 +84,9 @@ getEnabledTSMMVersions() {
 #endif
   return versions;
 }
+#endif
 
+#ifdef TSMTTSM
 std::vector<std::pair<MatmulFunctionType, std::string>>
 getEnabledTSMTTSMVersions() {
   std::vector<std::pair<MatmulFunctionType, std::string>> versions;
@@ -84,17 +94,24 @@ getEnabledTSMTTSMVersions() {
 #ifdef CUBLAS
   versions.push_back({tsmttsm_cublas<dtype>, "CUBLAS"});
 #endif
+#ifdef MAGMA
+  versions.push_back({tsmttsm_magma<dtype>, "MAGMA"});
+#endif
 #ifdef FIX_GENV1
   versions.push_back({GENV1::tsmttsm<dtype, PARM, PARN>, "FGENV1"});
 #endif
 #ifdef FIX_GENV3
-  versions.push_back({GENV3::tsmttsm<dtype, dItype, PARM, PARN>, "FGENV3"});
+  versions.push_back(
+      {GENV3::tsmttsm<dtype, dItype, PARM, PARN, GENV3::MEMPATH::GLOBAL>,
+       "FGENV3"});
 #endif
-#ifdef FIX_GENV32
-  versions.push_back({GENV32::tsmttsm<dtype, PARM, PARN>, "FGEN32"});
+#ifdef FIX_GENV3T
+  versions.push_back(
+      {GENV3::tsmttsm<dtype, dItype, PARM, PARN, GENV3::MEMPATH::TEX>,
+       "FGENV3T"});
 #endif
-#ifdef FIX_GENV3X
-  versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 2>, "FGEN3X"});
+#ifdef FIX_GENV32T
+  versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 2>, "FGENT32"});
 #endif
 #ifdef FIX_GENV4
   versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN>, "FGENV4"});
@@ -108,6 +125,11 @@ getEnabledTSMTTSMVersions() {
 #ifdef FIX_SPECSMALL
   versions.push_back({SPECSMALL::tsmttsm<dtype, dItype, PARM, PARN>, "FSMALL"});
 #endif
+//#ifdef FIX_REDUCEONLY
+//  versions.push_back({REDUCEONLY::tsmttsm<dtype, dItype, PARM, PARN>,
+//  "FREDUC"});
+//#endif
 #endif
   return versions;
 }
+#endif
