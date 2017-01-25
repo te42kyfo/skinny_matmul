@@ -48,10 +48,11 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, int K,
     threadSum[n] = 0;
   }
 
+  const T *baseB = B + nhalf * nPerThread;
   for (int idx = tidx / M / threadsPerN; idx < K;
        idx += blockDim.x * gridDim.x / M / threadsPerN) {
     for (int n = 0; n < nPerThread; n++) {
-      threadSum[n] += A[idx * lda + m] * B[idx * ldb + n + nhalf * nPerThread];
+      threadSum[n] += A[idx * lda + m] * __ldg(baseB + idx * ldb + n);
     }
   }
 
@@ -88,17 +89,17 @@ bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
     GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
   if (blockCount * M * N > 100 * 100 * 1000) return false;
 
-  if (N % THREAD_PER_N != 0) return false;
+  //  if (N % THREAD_PER_N != 0) return false;
 
-  /*  if (N > M) {
-    GENV3X::blockProductKernel<T, N, M, 256, true, int
-    THREAD_PER_N><<<blockCount, 256>>>(
+  if (N > M) {
+    GENV3X::blockProductKernel<T, N, M, 256, true,
+                               THREAD_PER_N><<<blockCount, 256>>>(
         B, A, (T *)d_temp_storage, K, ldb, lda, ldc);
-        } else {*/
-  GENV3X::blockProductKernel<T, M, N, 256, false,
-                             THREAD_PER_N><<<blockCount, 256>>>(
-      A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
-  //}
+  } else {
+    GENV3X::blockProductKernel<T, M, N, 256, false,
+                               THREAD_PER_N><<<blockCount, 256>>>(
+        A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
+  }
   GENV3X::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
       (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
