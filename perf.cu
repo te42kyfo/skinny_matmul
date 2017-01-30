@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
 #ifdef TSMM
       size_t ldb = M;
       size_t ldc = N;
-      size_t maxK = maxMatrixSize / max(lda, ldb);
+      size_t maxK = maxMatrixSize / max(lda, ldc);
 #endif
 #ifdef TSMTTSM
       size_t ldb = N;
@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
         double resultTime = measureMatmul(matmulVersion.first, M, N, K, lda,
                                           ldb, ldc, smCount, 1, false, -1.0);
 
-        while (resultTime > 0 && resultTime < 0.01 && K < maxK) {
+        while (resultTime > 0 && resultTime < 0.02 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
                                      ldc, smCount, 1, false, -1.0);
