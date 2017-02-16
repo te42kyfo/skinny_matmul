@@ -10,12 +10,10 @@
 #include <cuda.h>
 #include <cupti.h>
 #include <cstdio>
+#include <functional>
 #include <iostream>
 
 namespace {
-
-#define METRIC_NAME_TESLA "branch_efficiency"
-#define METRIC_NAME_FERMI "ipc"
 
 #define VERBOSE false
 
@@ -259,11 +257,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
   unsigned int pass;
   CUpti_MetricValue metricValue;
 
-  // make sure activity is enabled before any CUDA API
-  CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_KERNEL));
-
   if (context == 0) {
-    std::cout << "create context\n";
     DRIVER_API_CALL(cuInit(0));
     DRIVER_API_CALL(cuDeviceGetCount(&deviceCount));
     if (deviceCount == 0) {
@@ -282,8 +276,12 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
                                               &computeCapabilityMinor, device));
     DRIVER_API_CALL(cuCtxCreate(&context, 0, device));
   }
-  runPass();
 
+  // runPass();
+  cudaDeviceSynchronize();
+  // make sure activity is enabled before any CUDA API
+  CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_KERNEL));
+  CUPTI_CALL(cuptiActivityFlushAll(0));
   // need to collect duration of kernel execution without any event
   // collection enabled (some metrics need kernel duration as part of
   // calculation). The only accurate way to do this is by using the
@@ -295,6 +293,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
     cudaDeviceSynchronize();
     CUPTI_CALL(cuptiActivityFlushAll(0));
   }
+  CUPTI_CALL(cuptiActivityDisable(CUPTI_ACTIVITY_KIND_KERNEL));
 
   // setup launch callback for event collection
   CUPTI_CALL(cuptiSubscribe(
@@ -345,11 +344,13 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
       case CUPTI_METRIC_VALUE_KIND_DOUBLE:
         if (VERBOSE)
           printf("Metric %s = %f\n", metricName, metricValue.metricValueDouble);
+        val = metricValue.metricValueDouble;
         break;
       case CUPTI_METRIC_VALUE_KIND_UINT64:
         if (VERBOSE)
           printf("Metric %s = %llu\n", metricName,
                  (unsigned long long)metricValue.metricValueUint64);
+        val = metricValue.metricValueUint64;
         break;
       case CUPTI_METRIC_VALUE_KIND_INT64:
         if (VERBOSE)
@@ -361,6 +362,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
         if (VERBOSE)
           printf("Metric %s = %f%%\n", metricName,
                  metricValue.metricValuePercent);
+        val = metricValue.metricValuePercent;
         break;
       case CUPTI_METRIC_VALUE_KIND_THROUGHPUT:
         if (VERBOSE)
@@ -381,6 +383,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
   }
 
   CUPTI_CALL(cuptiUnsubscribe(subscriber));
+  //cuCtxDestroy(context);
   return val;
 }
 }
