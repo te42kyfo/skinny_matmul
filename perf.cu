@@ -229,15 +229,20 @@ int main(int argc, char** argv) {
             double L2BW =
                 measureMetric(measureMatmulFunction, "l2_read_throughput");
 
+            double L2hitrate =
+                measureMetric(measureMatmulFunction, "l2_l1_read_hit_rate");
 
             cout << multype << " " << deviceName << " " << setw(3) << M << " "
                  << setw(3) << N << " " << setw(2) << beta << "    "
                  << (self == 1 ? "A*A" : "A*B") << "  " << matmulVersion.second
                  << " " << setw(9) << K << "  " << setw(8) << bestBlockCount
                  << " " << setprecision(3) << setw(8) << bestTime * 1000.0
-                 << " " << setw(5) << setprecision(3) << flops << " " << setw(5)
-                 << bw << " " << (readBW - eccBW / 2) / (1.0e9) << " "
-                 << L2BW / (1.0e9) << "  \n";
+                 << "ms "
+                 << " " << setw(5) << setprecision(3) << flops         //
+                 << "  " << setw(5) << bw                              //
+                 << " -  " << setw(5) << (readBW - eccBW / 2) / 1.0e9  //
+                 << " " << setw(5) << L2BW / 1.0e9                     //
+                 << " " << setw(5) << L2hitrate << "  \n";
 
             cout.flush();
             db.insert({{"multype", "\"" + multype + "\""},
@@ -254,7 +259,9 @@ int main(int argc, char** argv) {
                       {{"K", to_string(K)},
                        {"time", to_string(bestTime)},
                        {"flops", to_string(flops)},
-                       {"bw", to_string(bw)}});
+                       {"bw", to_string(bw)},
+                       {"l2bw", to_string(L2BW)},
+                       {"l2l1hitrate", to_string(L2hitrate)}});
           }
         }
       }
