@@ -7,9 +7,8 @@ namespace GENV4 {
 
 template <typename T, int M, int N>
 __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
-                             int blockCount, size_t lda, size_t ldb,
-                             size_t ldc) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+                             int blockCount, int lda, int ldb, int ldc) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (tidx >= M * N) return;
 
@@ -18,16 +17,18 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
 
   T sum = 0.0;
   for (int i = 0; i < blockCount; i++) {
-    sum += blockResults[i * N * ldc + n * ldc + m];
+    sum += blockResults[i * N * M + n * M + m];
   }
 
   result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
-template <typename T, int M, int N, int BLOCKSIZE>
-__global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
-                                   size_t lda, size_t ldb, size_t ldc) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+enum class MEMPATH { GLOBAL, TEX };
+
+template <typename T, int M, int N, int BLOCKSIZE, MEMPATH mempath>
+__global__ void blockProductKernel(const T *A, const T *B, T *out, int K,
+                                   int lda, int ldb, int ldc) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   __shared__ T blockStorage[BLOCKSIZE];
 
@@ -40,9 +41,26 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
 
   T threadSum = 0;
 
-  for (size_t idx = tidx / M / N; idx < K;
+  const int unrollFactor = 8;
+  const int subblockSize = K / unrollFactor;
+  int idx = tidx / M / N;
+
+  for (; idx < K / unrollFactor; idx += blockDim.x * gridDim.x / M / N) {
+    for (int u = 0; u < unrollFactor; u++) {
+      if (mempath == MEMPATH::GLOBAL) {
+        threadSum += A[(idx + u * subblockSize) * lda + m] *
+                     B[(idx + u * subblockSize) * ldb + n];
+      }
+      if (mempath == MEMPATH::TEX) {
+        threadSum += __ldg(A + (idx + u * subblockSize) * lda + m) *
+                     __ldg(B + (idx + u * subblockSize) * ldb + n);
+      }
+    }
+  }
+
+  for (idx = subblockSize * unrollFactor + tidx / M / N; idx < K;
        idx += blockDim.x * gridDim.x / M / N) {
-    threadSum += A[idx * lda + m] * B[idx * ldb + n];
+    threadSum += __ldg(A + idx * lda + m) * __ldg(B + idx * ldb + n);
   }
 
   __syncthreads();
@@ -55,13 +73,13 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
       blockSum += blockStorage[i];
     }
 
-    out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
+    out[blockIdx.x * N * M + n * M + m] = blockSum;
   }
 }
 
 void *d_temp_storage = NULL;
 
-template <typename T, int M, int N>
+template <typename T, int M, int N, MEMPATH mempath>
 bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
@@ -76,11 +94,11 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
 
   cudaMemset(d_temp_storage, 0, M * N * blockCount * sizeof(dtype));
 
-  GENV4::blockProductKernel<T, M, N, 256><<<blockCount, 256>>>(
+  GENV4::blockProductKernel<T, M, N, 256, mempath><<<blockCount, 256>>>(
       A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
 
-  GENV4::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
-      (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  //  GENV4::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
+  //    (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }
 }

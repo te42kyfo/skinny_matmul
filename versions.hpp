@@ -98,7 +98,12 @@ getEnabledTSMTTSMVersions() {
   versions.push_back({tsmttsm_magma<dtype>, "MAGMA"});
 #endif
 #ifdef FIX_GENV1
-  versions.push_back({GENV1::tsmttsm<dtype, PARM, PARN>, "FGENV1"});
+  versions.push_back(
+      {GENV1::tsmttsm<dtype, PARM, PARN, GENV1::MEMPATH::GLOBAL>, "FGENV1"});
+#endif
+#ifdef FIX_GENV1T
+  versions.push_back(
+      {GENV1::tsmttsm<dtype, PARM, PARN, GENV1::MEMPATH::TEX>, "FGENV1T"});
 #endif
 #ifdef FIX_GENV3
   versions.push_back(
@@ -117,7 +122,10 @@ getEnabledTSMTTSMVersions() {
   versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 3>, "FGEN33T"});
 #endif
 #ifdef FIX_GENV4
-  versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN>, "FGENV4"});
+  versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN, GENV4::MEMPATH::GLOBAL>, "FGENV4"});
+#endif
+#ifdef FIX_GENV4T
+  versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN, GENV4::MEMPATH::TEX>, "FGENV4T"});
 #endif
 #ifdef FIX_GENV5
   versions.push_back({GENV5::tsmttsm<dtype, PARM, PARN>, "FGENV5"});
