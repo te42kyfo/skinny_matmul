@@ -1,10 +1,13 @@
 #include <iomanip>
 #include <iostream>
+#include "../benchdb.hpp"
 #include "../dtime.hpp"
 #include "../gpu_error.cuh"
 #include "../metrics.cuh"
 
 using namespace std;
+
+BenchDB* dbptr;
 
 __global__ void initKernel(double* A, size_t N) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -69,7 +72,24 @@ __global__ void fatRakeLDGKernel(double* A, double* C, size_t K) {
   if (tidx == 0) C[tidx] = sum;
 }
 
-enum class KERNEL { rake, rakeLDG, fatRake, fatRakeLDG };
+template <int N>
+__global__ void cachedUniformLDGKernel(const double* __restrict__ A, double* C,
+                                       size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  double sum = 0;
+
+  const int m = tidx % N;
+  const int n = (tidx / N) % N;
+
+  for (int idx = tidx / N / N; idx < K; idx += gridDim.x * blockDim.x / N / N) {
+    //sum += __ldg(A + idx * N + m);  // + __ldg(A + idx * N + n);
+    sum += __ldg(A + idx * N + n);
+  }
+
+  if (tidx == 0) C[tidx] = sum;
+}
+
+enum class KERNEL { rake, rakeLDG, fatRake, fatRakeLDG, cachedUniformLDG };
 
 template <int N, KERNEL KT>
 double callKernel(double* dA, double* dC, int sizeA, int bC, int bS) {
@@ -77,6 +97,8 @@ double callKernel(double* dA, double* dC, int sizeA, int bC, int bS) {
   if (KT == KERNEL::rakeLDG) rakeLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
   if (KT == KERNEL::fatRake) fatRakeKernel<N><<<bC, bS>>>(dA, dC, sizeA);
   if (KT == KERNEL::fatRakeLDG) fatRakeLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
+  if (KT == KERNEL::cachedUniformLDG)
+    cachedUniformLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
   return 0.0;
 }
 
@@ -105,6 +127,9 @@ void measureMore(double* dA, double* dC, int sizeA) {
   if (KT == KERNEL::fatRakeLDG)
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &maxActiveBlocks, fatRakeLDGKernel<N>, blockSize, 0));
+  if (KT == KERNEL::cachedUniformLDG)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, cachedUniformLDGKernel<N>, blockSize, 0));
 
   std::function<double()> measureLoadFunction = std::bind(
       callKernel<N, KT>, dA, dC, K, maxActiveBlocks * smCount, blockSize);
@@ -132,10 +157,11 @@ void measureMore(double* dA, double* dC, int sizeA) {
        << setw(7) << L2BW / 1.0e9 << " "                                      //
        << setw(7) << L2hitrate << "% "                                        //
        << setw(7) << L2BW / appBW / 1.0e9 << "x "                             //
-       << setw(7) << L2BW / 758.0e6 / 13 << " "                               //
+       << setw(7) << L2BW / 758.0e6 / 13 << "B/c "                            //
        << setprecision(4) << setw(7) << texBW / 1.0e9 << " "                  //
        << setprecision(3) << setw(7) << texBW / appBW / 1.0e9 << "x "         //
-       << setw(7) << texHitrate << "%\n";
+       << setprecision(4) << setw(7) << texHitrate << "% "                    //
+       << setprecision(3) << setw(7) << texBW / 758.06e6 / 13 << "B/c\n";
 }
 
 template <int N, KERNEL KT>
@@ -147,22 +173,42 @@ void measureLess(double* dA, double* dC, int sizeA) {
   std::string deviceName = prop.name;
   int smCount = prop.multiProcessorCount;
 
-  int blockSize = 256;
+  int blockSize = 1024;
   int K = sizeA / N;
 
   int maxActiveBlocks;
-  if (KT == KERNEL::rake)
+  string kernelMultype;
+  string kernelName;
+  if (KT == KERNEL::rake) {
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &maxActiveBlocks, rakeKernel<N>, blockSize, 0));
-  if (KT == KERNEL::rakeLDG)
+    kernelMultype = "rake";
+    kernelName = "rake";
+  }
+  if (KT == KERNEL::rakeLDG) {
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &maxActiveBlocks, rakeLDGKernel<N>, blockSize, 0));
-  if (KT == KERNEL::fatRake)
+    kernelMultype = "rake";
+    kernelName = "rakeLDG";
+  }
+  if (KT == KERNEL::fatRake) {
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &maxActiveBlocks, fatRakeKernel<N>, blockSize, 0));
-  if (KT == KERNEL::fatRakeLDG)
+    kernelMultype = "fatRake";
+    kernelName = "fatRake";
+  }
+  if (KT == KERNEL::fatRakeLDG) {
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &maxActiveBlocks, fatRakeLDGKernel<N>, blockSize, 0));
+    kernelMultype = "fatRake";
+    kernelName = "fatRakeLDG";
+  }
+  if (KT == KERNEL::cachedUniformLDG) {
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, cachedUniformLDGKernel<N>, blockSize, 0));
+    kernelMultype = "cachedUniform";
+    kernelName = "cachedUniformLDG";
+  }
 
   std::function<double()> measureLoadFunction = std::bind(
       callKernel<N, KT>, dA, dC, K, maxActiveBlocks * smCount, blockSize);
@@ -175,11 +221,20 @@ void measureLess(double* dA, double* dC, int sizeA) {
   double dt = t2 - t1;
 
   double appBW = (size_t)N * K * sizeof(double) / dt * 1e-9;
-  double L2BW = measureMetric(measureLoadFunction, "l2_read_throughput");
+  double L2BW = measureMetric(measureLoadFunction, "l2_read_throughput") / 1.e9;
   double texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
 
-  cout << setprecision(3) << setw(5) << appBW << " " << setw(5) << L2BW / 1.0e9
-       << " " << setw(5) << texHitrate << " ";
+  cout << setprecision(3) << setw(5) << appBW << " " << setw(5) << L2BW << " "
+       << setw(5) << texHitrate << " ";
+  dbptr->insert({{"multype", "\"" + kernelMultype + "\""},
+                 {"device", "\"" + deviceName + "\""},
+                 {"M", to_string(N)},
+                 {"N", to_string(N)},
+                 {"name", "\"" + kernelName + "\""}},
+                {{"K", to_string(K)},
+                 {"time", to_string(dt)},
+                 {"bw", to_string(appBW)},
+                 {"l2bw", to_string(L2BW)}});
 }
 
 template <int N>
@@ -189,10 +244,14 @@ void measureAll(double* dA, double* dC, size_t sizeA) {
   measureLess<N, KERNEL::rakeLDG>(dA, dC, sizeA);
   measureLess<N, KERNEL::fatRake>(dA, dC, sizeA);
   measureLess<N, KERNEL::fatRakeLDG>(dA, dC, sizeA);
+  measureLess<N, KERNEL::cachedUniformLDG>(dA, dC, sizeA);
   cout << "\n";
 }
 
 int main(int argc, char** argv) {
+  BenchDB db("../benchmarks.db");
+  dbptr = &db;
+
   size_t sizeA = 1 * ((size_t)1 << 30) / sizeof(double);
   size_t sizeC = 256 * 2000;
   double* dA;
@@ -202,8 +261,8 @@ int main(int argc, char** argv) {
   initKernel<<<52, 256>>>(dA, sizeA);
   initKernel<<<52, 256>>>(dC, sizeC);
 
-  measureAll<1>(dA, dC, sizeA);
-  measureAll<2>(dA, dC, sizeA);
+  measureMore<32, KERNEL::cachedUniformLDG>(dA, dC, sizeA);
+  /*  measureAll<2>(dA, dC, sizeA);
   measureAll<3>(dA, dC, sizeA);
   measureAll<4>(dA, dC, sizeA);
   measureAll<5>(dA, dC, sizeA);
@@ -234,4 +293,36 @@ int main(int argc, char** argv) {
   measureAll<30>(dA, dC, sizeA);
   measureAll<31>(dA, dC, sizeA);
   measureAll<32>(dA, dC, sizeA);
+  measureAll<33>(dA, dC, sizeA);
+  measureAll<34>(dA, dC, sizeA);
+  measureAll<35>(dA, dC, sizeA);
+  measureAll<36>(dA, dC, sizeA);
+  measureAll<37>(dA, dC, sizeA);
+  measureAll<38>(dA, dC, sizeA);
+  measureAll<39>(dA, dC, sizeA);
+  measureAll<40>(dA, dC, sizeA);
+  measureAll<41>(dA, dC, sizeA);
+  measureAll<42>(dA, dC, sizeA);
+  measureAll<43>(dA, dC, sizeA);
+  measureAll<44>(dA, dC, sizeA);
+  measureAll<45>(dA, dC, sizeA);
+  measureAll<46>(dA, dC, sizeA);
+  measureAll<47>(dA, dC, sizeA);
+  measureAll<48>(dA, dC, sizeA);
+  measureAll<49>(dA, dC, sizeA);
+  measureAll<50>(dA, dC, sizeA);
+  measureAll<51>(dA, dC, sizeA);
+  measureAll<52>(dA, dC, sizeA);
+  measureAll<53>(dA, dC, sizeA);
+  measureAll<54>(dA, dC, sizeA);
+  measureAll<55>(dA, dC, sizeA);
+  measureAll<56>(dA, dC, sizeA);
+  measureAll<57>(dA, dC, sizeA);
+  measureAll<58>(dA, dC, sizeA);
+  measureAll<59>(dA, dC, sizeA);
+  measureAll<60>(dA, dC, sizeA);
+  measureAll<61>(dA, dC, sizeA);
+  measureAll<62>(dA, dC, sizeA);
+  measureAll<63>(dA, dC, sizeA);
+  measureAll<64>(dA, dC, sizeA);*/
 }

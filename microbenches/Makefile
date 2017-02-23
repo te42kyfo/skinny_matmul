@@ -5,4 +5,4 @@ LDFLAGS     := -L/opt/cuda/lib64  -L$(CUDA_HOME)/extras/CUPTI/lib64 -lcupti -lcu
 INCLUDES 	:=  -I$(CUDA_HOME)/extras/CUPTI/include
 
 membw: membw.cu Makefile
-	nvcc $(NVCCFLAGS) $(INCLUDES) -o $@ $< $(LDFLAGS)
+	nvcc $(NVCCFLAGS) $(INCLUDES) -o $@ $< ../sqlite3.o $(LDFLAGS)
