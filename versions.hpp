@@ -32,6 +32,8 @@
 #include "tsmttsm/genv4.cuh"
 #include "tsmttsm/genv5.cuh"
 #include "tsmttsm/genv6.cuh"
+#include "tsmttsm/genv7.cuh"
+
 #include "tsmttsm/specsmall.cuh"
 #endif
 
@@ -136,6 +138,10 @@ getEnabledTSMTTSMVersions() {
 #ifdef FIX_SPECSMALL
   versions.push_back({SPECSMALL::tsmttsm<dtype, dItype, PARM, PARN>, "FSMALL"});
 #endif
+#ifdef FIX_GENV7
+  versions.push_back({GENV7::tsmttsm<dtype, dItype, PARM, PARN>, "FGENV7"});
+#endif
+
 //#ifdef FIX_REDUCEONLY
 //  versions.push_back({REDUCEONLY::tsmttsm<dtype, dItype, PARM, PARN>,
 //  "FREDUC"});
