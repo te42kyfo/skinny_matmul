@@ -4,6 +4,7 @@
 #include <iostream>
 #include "../PseudoQuad.cuh"
 #include "../cu_complex.h"
+#include "../multi_arch_atomic.cuh"
 
 namespace GENV7 {
 
@@ -114,9 +115,9 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
       }
 
       if (TRANSPOSE) {
-        out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
+        multiArchAtomicAdd(out + m * ldc + n, NULL, blockSum);
       } else {
-        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
+        multiArchAtomicAdd(out + n * ldc + m, NULL, blockSum);
       }
     }
   }
@@ -136,23 +137,25 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
 
   int const blocksize = 256;
 
+  cudaMemset(C, 0, sizeof(T) * N * ldc);
+
   if (N > M) {
     GENV7::blockProductKernel<T, iT, N, M, blocksize, true,
-                              false><<<blockCount, blocksize>>>(
-        B, A, (iT *)d_temp_storage, K, ldb, lda, ldc);
+                              false><<<blockCount, blocksize>>>(B, A, C, K, ldb,
+                                                                lda, ldc);
 
   } else {
     if (M == N && A == B) {
       GENV7::blockProductKernel<T, iT, M, N, blocksize, false,
-                                true><<<blockCount, blocksize>>>(
-          A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
+                                true><<<blockCount, blocksize>>>(A, B, C, K,
+                                                                 lda, ldb, ldc);
     } else {
       GENV7::blockProductKernel<T, iT, M, N, blocksize, false,
                                 false><<<blockCount, blocksize>>>(
-          A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
+          A, B, C, K, lda, ldb, ldc);
     }
   }
-  //GENV7::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
+  // GENV7::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
   //    (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }
