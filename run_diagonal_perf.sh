@@ -1,32 +1,29 @@
 #!/bin/sh
 
-if [ -z $1 ] || [ -z $2 ] || [ -z $3 ] || [ -z $3 ]; then
-    echo "Usage: $0 [tsmm/tsmttsm] <Kernel Version> <Mode> <drange>"
+if [ -z $1 ] || [ -z $2 ] || [ -z $3 ]; then
+    echo "Usage: $0 [tsmttsm/tsmm] <types> <x1> <x2>"
     exit
 fi
 
-cd $1
 
 multype=$1
-ver=$2
-dtype=$3
-range=$4
+dtype=$2
+xrange1=$3
+xrange2=$4
+if  [ -z $4 ]; then
+    xrange1=1
+    xrange2=$3
+fi
 
-make perf  M=0 N=0 GENVER=$ver MODE=$dtype PREFIX=./build 1>&2  &
-
-for (( d=1 ; d<=$range; d++ ))
+for (( x=$xrange1 ; x<=$xrange2; x+=1 ))
 do
-    make perf M=$d N=$d GENVER=$ver MODE=$dtype PREFIX=./build 1>&2 &
-    while test $(jobs -p | wc -w) -ge 100; do sleep 1; done
+    make perf M=$x N=$x MULTYPE=$multype TYPES=$dtype PREFIX=./build 1>&2  &
+    while test $(jobs -p | wc -w) -ge 40; do sleep 1; done
 done
-
 
 wait
 
-./build/perf0-0-$dtype
-
-for (( d=1 ; d<=$range; d++ ))
+for (( x=$xrange1 ; x<=$xrange2; x+=1 ))
 do
-    ./build/perf$d-$d-$dtype
+    ./build/perf-$multype-$x-$x-$dtype
 done
-
