@@ -6,3 +6,6 @@ INCLUDES 	:=  -I$(CUDA_HOME)/extras/CUPTI/include
 
 membw: membw.cu Makefile
 	nvcc $(NVCCFLAGS) $(INCLUDES) -o $@ $< ../sqlite3.o $(LDFLAGS)
+
+instrs: instruction_rates.cu Makefile
+	nvcc $(NVCCFLAGS) $(INCLUDES) -o $@ $< ../sqlite3.o $(LDFLAGS)
