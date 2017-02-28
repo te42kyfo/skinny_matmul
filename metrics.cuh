@@ -280,7 +280,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
   // runPass();
   cudaDeviceSynchronize();
   // make sure activity is enabled before any CUDA API
-  CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_KERNEL));
+  CUPTI_CALL(cuptiActivityEnableContext(context, CUPTI_ACTIVITY_KIND_KERNEL));
   CUPTI_CALL(cuptiActivityFlushAll(0));
   // need to collect duration of kernel execution without any event
   // collection enabled (some metrics need kernel duration as part of
@@ -293,7 +293,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
     cudaDeviceSynchronize();
     CUPTI_CALL(cuptiActivityFlushAll(0));
   }
-  CUPTI_CALL(cuptiActivityDisable(CUPTI_ACTIVITY_KIND_KERNEL));
+  CUPTI_CALL(cuptiActivityDisableContext(context, CUPTI_ACTIVITY_KIND_KERNEL));
 
   // setup launch callback for event collection
   CUPTI_CALL(cuptiSubscribe(
