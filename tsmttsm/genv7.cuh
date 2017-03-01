@@ -106,17 +106,18 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
     blockStorage[threadIdx.x] = threadSum[n];
     __syncthreads();
 
-    if (threadIdx.x < M) {
-      iT blockSum;
-      zero(blockSum);
-      for (int w = 0; w < rowsPerBlock; w++) {
-        blockSum = accu(blockSum, blockStorage[w * M + m]);
+    for (unsigned int s = rowsPerBlock / 2; s > 0; s >>= 1) {
+      if (localRow < s) {
+        blockStorage[localRow * M + m] += blockStorage[(localRow + s) * M + m];
       }
+      __syncthreads();
+    }
 
+    if (threadIdx.x < M) {
       if (TRANSPOSE) {
-        out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
+        out[blockIdx.x * M * ldc + m * ldc + n] = blockStorage[m];
       } else {
-        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
+        out[blockIdx.x * N * ldc + n * ldc + m] = blockStorage[m];
       }
     }
   }
@@ -152,8 +153,8 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
           A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     }
   }
-  //GENV7::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
-  //    (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  GENV7::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
+      (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }
 }
