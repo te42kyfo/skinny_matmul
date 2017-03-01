@@ -11,8 +11,11 @@ TSMM_VERSIONS 		:= # -DFIX_FB -DFIX2 -DFIX1 -DCUBLAS
 TSMTTSM_VERSIONS 	:= -DFIX_GENV7
 TYPES 		:= DR
 MULTYPE		:= TSMTTSM
-CONSTANTS	:= -DPARM=$M -DPARN=$N -D$(MULTYPE)=1 -D$(TYPES)=1 $(TSMTTSM_VERSIONS) $(TSMM_VERSIONS) -DVERBOSE_ERRORS
+GIT_BRANCH_NAME := $(shell git status --porcelain --branch | grep '\#\#' | cut -c 4-)
+CONSTANTS	:= -DPARM=$M -DPARN=$N -D$(MULTYPE)=1 -D$(TYPES)=1 $(TSMTTSM_VERSIONS) $(TSMM_VERSIONS) -DVERBOSE_ERRORS -DGIT_BRANCH_NAME="\"$(GIT_BRANCH_NAME)\""
 PREFIX		:= ./build/
+
+
 
 NAME 		:= -$(MULTYPE)-$M-$N-$(TYPES)
 
@@ -24,8 +27,11 @@ test: $(PREFIX)/test$(NAME)
 $(PREFIX)/test$(NAME): test.cu Makefile *.cuh tsmttsm/*.cuh tsmm/*.cuh
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< $(LDFLAGS)
 
+runperf: perf
+	$(PREFIX)/perf$(NAME)
 
 perf: $(PREFIX)/perf$(NAME)
+
 
 $(PREFIX)/perf$(NAME): perf.cu sqlite3.o benchdb.hpp *.cuh tsmttsm/*.cuh tsmm/*.cuh Makefile versions.hpp
 	$(NVCC) $(NVCCFLAGS) $(CONSTANTS) $(INCLUDES) -o $@ $< sqlite3.o $(LDFLAGS)
