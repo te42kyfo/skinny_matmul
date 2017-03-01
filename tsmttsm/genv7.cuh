@@ -102,7 +102,7 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
   }
 
   // Calculate block results
-  /*for (int n = 0; n < N; n++) {
+  for (int n = 0; n < N; n++) {
     __syncthreads();
     blockStorage[threadIdx.x] = threadSum[n];
     __syncthreads();
@@ -120,8 +120,8 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
         multiArchAtomicAdd(out + n * ldc + m, NULL, blockSum);
       }
     }
-  }*/
-  if (localRow < rowsPerBlock) {
+  }
+  /*  if (localRow < rowsPerBlock) {
     for (int n = 0; n < N; n++) {
       if (TRANSPOSE) {
         multiArchAtomicAdd(out + m * ldc + n, NULL, threadSum[n]);
@@ -129,7 +129,7 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
         multiArchAtomicAdd(out + n * ldc + m, NULL, threadSum[n]);
       }
     }
-  }
+    }*/
 }
 
 void *d_temp_storage = NULL;
