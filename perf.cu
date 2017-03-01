@@ -253,6 +253,7 @@ int main(int argc, char** argv) {
                        {"name", "\"" + matmulVersion.second + "\""},
                        {"inplace", to_string(self)},
                        {"zerobeta", to_string(beta == 0)},
+                       {"branch", "\"" GIT_BRANCH_NAME "\"" },
                        {"usr1_name", "\"\""},
                        {"usr1_val", "\"\""}},
 
