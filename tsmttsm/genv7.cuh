@@ -53,24 +53,30 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
 
   // Block synchronous loop
   int idx = blockIdx.x * rowsPerBlock;
+  T avNow = A[idx * lda + aOffset];
+  T bvNow = B[idx * ldb + bOffset];
+  T avNext = 0;
+  T bvNext = 0;
+
   for (; idx < K - rowsPerBlock; idx += gridDim.x * rowsPerBlock) {
-    T av = A[idx * lda + aOffset];
-    T bv;
+    int idxNext = idx + gridDim.x * rowsPerBlock;
+    avNext = A[idxNext * lda + aOffset];
 
     if (!SELF) {
-      bv = B[idx * ldb + bOffset];
+      bvNext = B[idxNext * ldb + bOffset];
     } else {
-      bv = av;
+      bvNext = avNext;
     }
-
     __syncthreads();
-    rowCache[threadIdx.x] = bv;
+    rowCache[threadIdx.x] = bvNow;
     __syncthreads();
 
     int localAddress = threadIdx.x - m;
     for (int n = 0; n < N; n++) {
-      threadSum[n] = axpy2(threadSum[n], av, rowCache[localAddress + n]);
+      threadSum[n] = axpy2(threadSum[n], avNow, rowCache[localAddress + n]);
     }
+    avNow = avNext;
+    bvNow = bvNext;
   }
 
   // Remainder loop
@@ -135,7 +141,7 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
     }
   }
 
-  //GENV7::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
+  //  GENV7::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
   //    (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
 
   return true;
