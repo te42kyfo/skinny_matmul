@@ -27,9 +27,9 @@ __global__ void deviceReduce(iT *blockResults, T *result, T alpha, T beta,
 
 template <typename T, typename iT, int M, int N, int BLOCKSIZE, bool TRANSPOSE,
           bool SELF>
-__global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
-                                   const int lda, const int ldb,
-                                   const int ldc) {
+__global__ void __launch_bounds__(BLOCKSIZE)
+    blockProductKernel(const T *A, const T *B, iT *out, const int K,
+                       const int lda, const int ldb, const int ldc) {
   const int rowsPerBlock = BLOCKSIZE / M;
   int m = threadIdx.x % M;
   int localRow = threadIdx.x / M;
@@ -122,7 +122,7 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
     GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(iT) * 100 * 100 * 1000));
   if (blockCount * M * N > 100 * 100 * 1000) return false;
 
-  int const blocksize = 256;
+  int const blocksize = (256 / M) * M;
 
   if (N > M) {
     GENV7::blockProductKernel<T, iT, N, M, blocksize, true,
