@@ -110,7 +110,7 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N) return false;
-  if (varM > 32 || varN > 32) return false;
+  
   if (d_temp_storage == NULL)
     GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(iT) * 100 * 100 * 1000));
   if (blockCount * M * N > 100 * 100 * 1000) return false;
