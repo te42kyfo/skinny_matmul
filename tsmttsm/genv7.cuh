@@ -68,13 +68,12 @@ __global__ void __launch_bounds__(BLOCKSIZE)
       bvNext = avNext;
     }
     __syncthreads();
-    rowCache[threadIdx.x] = bvNow;
+    rowCache[m*rowsPerBlock + localRow] = bvNow;
     __syncthreads();
 
     int localAddress = threadIdx.x - m;
-    for (int i = 0; i < N; i++) {
-      int n = (i + m) % N;
-      threadSum[n] = axpy2(threadSum[n], avNow, rowCache[localAddress + n]);
+    for (int n = 0; n < N; n++) {
+      threadSum[n] = axpy2(threadSum[n], avNow, rowCache[n*rowsPerBlock + localRow]);
     }
     avNow = avNext;
     bvNow = bvNext;
