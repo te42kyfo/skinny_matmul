@@ -122,14 +122,14 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
     GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(iT) * 100 * 100 * 1000));
   if (blockCount * M * N > 100 * 100 * 1000) return false;
 
-  int const blocksize = (256 / M) * M;
-
   if (N > M) {
+    int const blocksize = (256 / N) * N;
     GENV7::blockProductKernel<T, iT, N, M, blocksize, true,
                               false><<<blockCount, blocksize>>>(
         B, A, (iT *)d_temp_storage, K, ldb, lda, ldc);
 
   } else {
+    int const blocksize = (256 / M) * M;
     if (M == N && A == B) {
       GENV7::blockProductKernel<T, iT, M, N, blocksize, false,
                                 true><<<blockCount, blocksize>>>(
