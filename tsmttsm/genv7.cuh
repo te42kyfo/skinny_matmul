@@ -72,7 +72,8 @@ __global__ void __launch_bounds__(BLOCKSIZE)
     __syncthreads();
 
     int localAddress = threadIdx.x - m;
-    for (int n = 0; n < N; n++) {
+    for (int i = 0; i < N; i++) {
+      int n = (i + m) % N;
       threadSum[n] = axpy2(threadSum[n], avNow, rowCache[localAddress + n]);
     }
     avNow = avNext;
