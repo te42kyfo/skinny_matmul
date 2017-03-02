@@ -53,17 +53,17 @@ __global__ void __launch_bounds__(BLOCKSIZE)
 
   // Block synchronous loop
   int idx = blockIdx.x * rowsPerBlock;
-  T avNow = A[idx * lda + aOffset];
-  T bvNow = B[idx * ldb + bOffset];
+  T avNow = __ldg(A + idx * lda + aOffset);
+  T bvNow = __ldg(B + idx * ldb + bOffset);
   T avNext = 0;
   T bvNext = 0;
 
   for (; idx < K - rowsPerBlock; idx += gridDim.x * rowsPerBlock) {
     int idxNext = idx + gridDim.x * rowsPerBlock;
-    avNext = A[idxNext * lda + aOffset];
+    avNext = __ldg(A + idxNext * lda + aOffset);
 
     if (!SELF) {
-      bvNext = B[idxNext * ldb + bOffset];
+      bvNext = __ldg(B + idxNext * ldb + bOffset);
     } else {
       bvNext = avNext;
     }
