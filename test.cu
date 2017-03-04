@@ -6,6 +6,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "cu_complex.h"
