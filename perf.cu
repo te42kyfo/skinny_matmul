@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
             int bestBlockCount = 0;
             for (int blockCount = 1 * smCount; blockCount <= 8 * smCount;
                  blockCount += smCount) {
-              int sampleSize = 3;
+              int sampleSize = 5;
               vector<double> times(sampleSize);
               for (int t = 0; t < sampleSize; t++) {
                 times[t] = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
@@ -220,29 +220,38 @@ int main(int argc, char** argv) {
                 std::bind(measureMatmul, matmulVersion.first, M, N, K, lda, ldb,
                           ldc, bestBlockCount, 1, (self == 1), beta);
 
+            if (bestTime < 0) continue;
             double eccBW =
-                measureMetric(measureMatmulFunction, "ecc_throughput");
+                measureMetric(measureMatmulFunction, "ecc_throughput") / 1.e9;
 
             double readBW =
-                measureMetric(measureMatmulFunction, "dram_read_throughput");
+                measureMetric(measureMatmulFunction, "dram_read_throughput") /
+                1.e9;
 
             double L2BW =
-                measureMetric(measureMatmulFunction, "l2_read_throughput");
+                measureMetric(measureMatmulFunction, "l2_read_throughput") /
+                1.e9;
 
-            double L2hitrate =
-                measureMetric(measureMatmulFunction, "l2_l1_read_hit_rate");
+            double sharedLoadBW =
+                measureMetric(measureMatmulFunction, "shared_load_throughput") /
+                1.e9;
+
+            double occupancy =
+                measureMetric(measureMatmulFunction, "achieved_occupancy");
 
             cout << multype << " " << deviceName << " " << setw(3) << M << " "
                  << setw(3) << N << " " << setw(2) << beta << "    "
-                 << (self == 1 ? "A*A" : "A*B") << "  " << matmulVersion.second
-                 << " " << setw(9) << K << "  " << setw(8) << bestBlockCount
-                 << " " << setprecision(3) << setw(8) << bestTime * 1000.0
-                 << "ms "
-                 << " " << setw(5) << setprecision(3) << flops         //
-                 << "  " << setw(5) << bw                              //
-                 << " -  " << setw(5) << (readBW - eccBW / 2) / 1.0e9  //
-                 << " " << setw(5) << L2BW / 1.0e9                     //
-                 << " " << setw(5) << L2hitrate << "  \n";
+                 << (self == 1 ? "A*A" : "A*B") << "  " << setw(8)
+                 << matmulVersion.second << " " << setw(9) << K << "  "
+                 << setw(8) << bestBlockCount << " " << setprecision(3)
+                 << setw(8) << bestTime * 1000.0 << "ms "
+                 << " " << setw(5) << setprecision(3) << flops               //
+                 << "  " << setw(5) << bw                                    //
+                 << " - " << setprecision(2) << setw(5) << occupancy << " "  //
+                 << "  " << setprecision(3) << setw(5)
+                 << (readBW - eccBW / 2)    //
+                 << " " << setw(5) << L2BW  //
+                 << " " << setw(5) << sharedLoadBW << "  \n";
 
             cout.flush();
             db.insert({{"multype", "\"" + multype + "\""},
@@ -263,7 +272,9 @@ int main(int argc, char** argv) {
                        {"flops", to_string(flops)},
                        {"bw", to_string(bw)},
                        {"l2bw", to_string(L2BW)},
-                       {"l2l1hitrate", to_string(L2hitrate)}});
+                       {"sharedbw", to_string(sharedLoadBW)},
+                       {"occupancy", to_string(occupancy)},
+                       {"drambw", to_string((readBW - eccBW / 2))}});
           }
         }
       }
