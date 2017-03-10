@@ -216,28 +216,35 @@ int main(int argc, char** argv) {
                 flops = M * N * K * flopsPerCell / bestTime * 1.0e-9;
               }
             }
-            std::function<double()> measureMatmulFunction =
+            std::function<double()> measureMatmulFunc =
                 std::bind(measureMatmul, matmulVersion.first, M, N, K, lda, ldb,
                           ldc, bestBlockCount, 1, (self == 1), beta);
 
             if (bestTime < 0) continue;
-            double eccBW =
-                measureMetric(measureMatmulFunction, "ecc_throughput") / 1.e9;
 
-            double readBW =
-                measureMetric(measureMatmulFunction, "dram_read_throughput") /
+            double eccBW = 0, DRAMreadBW = 0, DRAMwriteBW = 0, L2readBW = 0,
+                   L2writeBW = 0, sharedLoadBW = 0, occupancy = 0;
+
+            DRAMreadBW =
+                measureMetric(measureMatmulFunc, "dram_read_throughput") / 1.e9;
+
+            DRAMwriteBW =
+                measureMetric(measureMatmulFunc, "dram_write_throughput") /
                 1.e9;
 
-            double L2BW =
-                measureMetric(measureMatmulFunction, "l2_read_throughput") /
+            L2readBW =
+                measureMetric(measureMatmulFunc, "l2_read_throughput") / 1.e9;
+
+            L2writeBW =
+                measureMetric(measureMatmulFunc, "l2_write_throughput") / 1.e9;
+
+            sharedLoadBW =
+                measureMetric(measureMatmulFunc, "shared_load_throughput") /
                 1.e9;
 
-            double sharedLoadBW =
-                measureMetric(measureMatmulFunction, "shared_load_throughput") /
-                1.e9;
+            occupancy = measureMetric(measureMatmulFunc, "achieved_occupancy");
 
-            double occupancy =
-                measureMetric(measureMatmulFunction, "achieved_occupancy");
+            eccBW = measureMetric(measureMatmulFunc, "ecc_throughput") / 1.e9;
 
             cout << multype << " " << deviceName << " " << setw(3) << M << " "
                  << setw(3) << N << " " << setw(2) << beta << "    "
@@ -249,9 +256,9 @@ int main(int argc, char** argv) {
                  << "  " << setw(5) << bw                                    //
                  << " - " << setprecision(2) << setw(5) << occupancy << " "  //
                  << "  " << setprecision(3) << setw(5)
-                 << (readBW - eccBW / 2)    //
-                 << " " << setw(5) << L2BW  //
-                 << " " << setw(5) << sharedLoadBW << "  \n";
+                 << (DRAMreadBW + DRAMwriteBW - eccBW / 2)  //
+                 << " " << setw(5) << L2readBW + L2writeBW  //
+                 << " " << setw(5) << eccBW << "  \n";
 
             cout.flush();
             db.insert({{"multype", "\"" + multype + "\""},
@@ -271,10 +278,11 @@ int main(int argc, char** argv) {
                        {"time", to_string(bestTime)},
                        {"flops", to_string(flops)},
                        {"bw", to_string(bw)},
-                       {"l2bw", to_string(L2BW)},
+                       {"l2bw", to_string(L2readBW + L2writeBW)},
                        {"sharedbw", to_string(sharedLoadBW)},
                        {"occupancy", to_string(occupancy)},
-                       {"drambw", to_string((readBW - eccBW / 2))}});
+                       {"drambw",
+                        to_string((DRAMreadBW + DRAMwriteBW - eccBW / 2))}});
           }
         }
       }
