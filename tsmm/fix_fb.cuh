@@ -10,13 +10,22 @@ static __global__ void tsmm_fix_fb_kernel(const T *__restrict__ A,
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
   int n = tidx % N;
 
+  __shared__ T bCache[N][M];
+  for (int mn = threadIdx.x; mn < M * N; mn += BLOCKSIZE) {
+    int tn = mn / M;
+    int tm = mn % M;
+    bCache[tn][tm] = B[tn * ldb + tm];
+  }
+
+  __syncthreads();
+
   if (tidx / N == gridDim.x * BLOCKSIZE / N && !BETAISZERO) return;
 
   for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;
     zero(sum);
     for (int m = 0; m < M; m++) {
-      sum = axpy(sum, A[row * lda + m], B[n * ldb + m]);
+      sum = axpy(sum, A[row * lda + m], bCache[n][m]);
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum);
