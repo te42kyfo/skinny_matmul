@@ -324,7 +324,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
   if (metricData.eventIdx != metricData.numEvents) {
     fprintf(stderr, "error: expected %u metric events, got %u\n",
             metricData.numEvents, metricData.eventIdx);
-    exit(-1);
+    return 0;
   }
 
   // use all the collected events to calculate the metric value
@@ -378,12 +378,12 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
         break;
       default:
         fprintf(stderr, "error: unknown value kind\n");
-        exit(-1);
+        return 0;
     }
   }
 
   CUPTI_CALL(cuptiUnsubscribe(subscriber));
-  //cuCtxDestroy(context);
+  // cuCtxDestroy(context);
   return val;
 }
 }
