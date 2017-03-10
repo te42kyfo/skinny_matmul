@@ -33,6 +33,7 @@
 #include "tsmttsm/genv5.cuh"
 #include "tsmttsm/genv6.cuh"
 #include "tsmttsm/genv7.cuh"
+#include "tsmttsm/genv8.cuh"
 
 #include "tsmttsm/specsmall.cuh"
 #endif
@@ -124,10 +125,12 @@ getEnabledTSMTTSMVersions() {
   versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 3>, "FGEN33T"});
 #endif
 #ifdef FIX_GENV4
-  versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN, GENV4::MEMPATH::GLOBAL>, "FGENV4"});
+  versions.push_back(
+      {GENV4::tsmttsm<dtype, PARM, PARN, GENV4::MEMPATH::GLOBAL>, "FGENV4"});
 #endif
 #ifdef FIX_GENV4T
-  versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN, GENV4::MEMPATH::TEX>, "FGENV4T"});
+  versions.push_back(
+      {GENV4::tsmttsm<dtype, PARM, PARN, GENV4::MEMPATH::TEX>, "FGENV4T"});
 #endif
 #ifdef FIX_GENV5
   versions.push_back({GENV5::tsmttsm<dtype, PARM, PARN>, "FGENV5"});
@@ -140,6 +143,21 @@ getEnabledTSMTTSMVersions() {
 #endif
 #ifdef FIX_GENV7
   versions.push_back({GENV7::tsmttsm<dtype, dItype, PARM, PARN>, "FGENV7"});
+#endif
+#ifdef FIX_GENV8
+  versions.push_back({GENV8::tsmttsm<dtype, dItype, PARM, PARN, 4>, "FGENV8"});
+#endif
+#ifdef FIX_GENV82
+  versions.push_back({GENV8::tsmttsm<dtype, dItype, PARM, PARN, 2>, "FGENV82"});
+#endif
+#ifdef FIX_GENV83
+  versions.push_back({GENV8::tsmttsm<dtype, dItype, PARM, PARN, 3>, "FGENV83"});
+#endif
+#ifdef FIX_GENV84
+  versions.push_back({GENV8::tsmttsm<dtype, dItype, PARM, PARN, 4>, "FGENV84"});
+#endif
+#ifdef FIX_GENV85
+  versions.push_back({GENV8::tsmttsm<dtype, dItype, PARM, PARN, 5>, "FGENV85"});
 #endif
 
 //#ifdef FIX_REDUCEONLY
