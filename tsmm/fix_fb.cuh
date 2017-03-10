@@ -10,11 +10,11 @@ static __global__ void tsmm_fix_fb_kernel(const T *__restrict__ A,
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
   int n = tidx % N;
 
-  __shared__ T bCache[N][M];
+  __shared__ T bCache[M][N];
   for (int mn = threadIdx.x; mn < M * N; mn += BLOCKSIZE) {
     int tn = mn / M;
     int tm = mn % M;
-    bCache[tn][tm] = B[tn * ldb + tm];
+    bCache[tm][tn] = B[tn * ldb + tm];
   }
 
   __syncthreads();
@@ -24,8 +24,9 @@ static __global__ void tsmm_fix_fb_kernel(const T *__restrict__ A,
   for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;
     zero(sum);
+#pragma unroll(4)
     for (int m = 0; m < M; m++) {
-      sum = axpy(sum, A[row * lda + m], bCache[n][m]);
+      sum = axpy(sum, A[row * lda + m], bCache[m][n]);
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum);
@@ -41,7 +42,7 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N || A == C) return false;
 
-  const int BLOCKSIZE = 256;
+  const int BLOCKSIZE = 512;
   T Tzero;
   zero(Tzero);
   if (eq(beta, Tzero)) {
