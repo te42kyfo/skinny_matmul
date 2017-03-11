@@ -42,7 +42,7 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N || A == C) return false;
 
-  const int BLOCKSIZE = 512;
+  const int BLOCKSIZE = 1024;
   T Tzero;
   zero(Tzero);
   if (eq(beta, Tzero)) {
