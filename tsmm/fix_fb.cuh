@@ -2,11 +2,10 @@
 #include "../eq.cuh"
 
 template <typename T, int M, int N, int BLOCKSIZE, bool BETAISZERO>
-static __global__ void tsmm_fix_fb_kernel(const T *__restrict__ A,
-                                          const T *__restrict__ B, T *out,
-                                          const int K, const int lda,
-                                          const int ldb, const int ldc, T alpha,
-                                          T beta) {
+static __global__ void __launch_bounds__(BLOCKSIZE)
+    tsmm_fix_fb_kernel(const T *__restrict__ A, const T *__restrict__ B, T *out,
+                       const int K, const int lda, const int ldb, const int ldc,
+                       T alpha, T beta) {
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
   int n = tidx % N;
 
@@ -42,7 +41,7 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N || A == C) return false;
 
-  const int BLOCKSIZE = 1024;
+  const int BLOCKSIZE = ((1 << 15) / (M*N*8) < 3) ? 1024 : 512;
   T Tzero;
   zero(Tzero);
   if (eq(beta, Tzero)) {
