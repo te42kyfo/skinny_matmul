@@ -23,12 +23,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
   for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;
     zero(sum);
-#pragma unroll(M % 8 == 0 ? 8 : (M % 7 == 0                             \
-                                 ? 7 : (M % 6 == 0                      \
-                                        ? 6 : (M % 5 == 0               \
-                                               ? 5 : (M % 4 == 0        \
-                                                      ? 4 : (M % 3 == 0 \
-                                                             ? 3 : 4))))))
+#pragma unroll(M<=8 ? M : 4)
     for (int m = 0; m < M; m++) {
       sum = axpy(sum, A[row * lda + m], bCache[m][n]);
     }
