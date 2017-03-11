@@ -23,7 +23,12 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
   for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;
     zero(sum);
-#pragma unroll(4)
+#pragma unroll(M % 8 == 0 ? 8 : (M % 7 == 0                             \
+                                 ? 7 : (M % 6 == 0                      \
+                                        ? 6 : (M % 5 == 0               \
+                                               ? 5 : (M % 4 == 0        \
+                                                      ? 4 : (M % 3 == 0 \
+                                                             ? 3 : 4))))))
     for (int m = 0; m < M; m++) {
       sum = axpy(sum, A[row * lda + m], bCache[m][n]);
     }
@@ -41,7 +46,7 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N || A == C) return false;
 
-  const int BLOCKSIZE = ((1 << 15) / (M*N*8) < 3) ? 1024 : 512;
+  const int BLOCKSIZE = ((1 << 15) / (M * N * 8) < 3) ? 1024 : 512;
   T Tzero;
   zero(Tzero);
   if (eq(beta, Tzero)) {
