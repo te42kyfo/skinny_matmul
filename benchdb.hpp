@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 #include "sqlite3.h"
 
 using StrPair = std::pair<std::string, std::string>;
@@ -63,6 +64,7 @@ class BenchDB {
     query << " 1=1";
 
     std::string queryStr = query.str();
+    // std::cout << queryStr << "\n";
     sqlite3_error(sqlite3_exec(_dbCon, queryStr.c_str(), NULL, NULL, NULL));
 
     query.str("");
@@ -84,6 +86,7 @@ class BenchDB {
     query.seekp(-2, std::ios_base::end);
     query << ")";
     queryStr = query.str();
+    // std::cout << queryStr << "\n";
     sqlite3_error(sqlite3_exec(_dbCon, queryStr.c_str(), NULL, NULL, NULL));
   }
 
@@ -94,6 +97,7 @@ class BenchDB {
       std::cerr << errMsg << "\n";
     }
   }
+
 
   std::vector<Entry> _queue;
   sqlite3* _dbCon;

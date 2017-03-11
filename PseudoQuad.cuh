@@ -1,3 +1,5 @@
+#pragma once
+
 #include "cu_complex.h"
 
 struct PseudoQuad {
@@ -103,6 +105,16 @@ __device__ PseudoQuad axpy2(PseudoQuad C, double A, double B) {
   R.t = __dadd_rn(DC, DAB);
   R.t = __dadd_rn(R.t, C.t);
   return R;
+}
+
+template <typename T>
+__device__ T slow_axpy2(T C, double A, double B) {
+  return C + A * B;
+}
+template <>
+__device__ PseudoQuad slow_axpy2(PseudoQuad C, double A, double B) {
+  PseudoQuad ab = FMA2Mult(A, B);
+  return accu(C, ab);
 }
 
 template <>

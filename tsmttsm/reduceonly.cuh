@@ -5,7 +5,7 @@
 #include "../PseudoQuad.cuh"
 #include "../cu_complex.h"
 
-namespace SPECSMALL {
+namespace REDUCEONLY {
 
 template <typename T, typename iT, int M, int N>
 __global__ void deviceReduce(iT *blockResults, T *result, T alpha, T beta,
@@ -18,7 +18,7 @@ __global__ void deviceReduce(iT *blockResults, T *result, T alpha, T beta,
   iT sum;
   zero(sum);
   for (int i = 0; i < blockCount; i++) {
-    sum = accu(sum, blockResults[i * N * ldc + n * ldc + m]);
+    sum = accu(sum, blockResults[i * N * M + n * M + m]);
   }
 
   result[n * ldc + m] = accu(scale(result[n * ldc + m], beta),
@@ -49,22 +49,9 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
   iT threadSum[N];
   for (int n = 0; n < N; n++) {
     zero(threadSum[n]);
+    threadSum[n] = tidx;
   }
 
-  for (int idx = (tidx / 32) * rowsPerWarp + warpLane / M; idx < K;
-       idx += blockDim.x * gridDim.x / 32 * rowsPerWarp) {
-    T av = A[idx * lda + m];
-    if (!SELF) {
-      rowCache[threadIdx.x] = B[idx * ldb + m];
-    } else {
-      rowCache[threadIdx.x] = av;
-    }
-
-    int localAddress = threadIdx.x - m;
-    for (int n = 0; n < N; n++) {
-      threadSum[n] = axpy2(threadSum[n], av, rowCache[localAddress + n]);
-    }
-  }
 
   for (int n = 0; n < N; n++) {
     __syncthreads();
@@ -81,9 +68,9 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
       }
 
       if (TRANSPOSE) {
-        out[blockIdx.x * M * ldc + m * ldc + n] = blockSum;
+        out[blockIdx.x * M * N + m * N + n] = blockSum;
       } else {
-        out[blockIdx.x * N * ldc + n * ldc + m] = blockSum;
+        out[blockIdx.x * N * M + n * M + m] = blockSum;
       }
     }
   }
@@ -104,22 +91,22 @@ bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
   int const blocksize = 256;
 
   if (N > M) {
-    SPECSMALL::blockProductKernel<T, iT, N, M, blocksize, true,
-                                  false><<<blockCount, blocksize>>>(
+    REDUCEONLY::blockProductKernel<T, iT, N, M, blocksize, true,
+                                false><<<blockCount, blocksize>>>(
         B, A, (iT *)d_temp_storage, K, ldb, lda, ldc);
 
   } else {
     if (M == N && A == B) {
-      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false,
-                                    true><<<blockCount, blocksize>>>(
+      REDUCEONLY::blockProductKernel<T, iT, M, N, blocksize, false,
+                                  true><<<blockCount, blocksize>>>(
           A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     } else {
-      SPECSMALL::blockProductKernel<T, iT, M, N, blocksize, false,
-                                    false><<<blockCount, blocksize>>>(
+      REDUCEONLY::blockProductKernel<T, iT, M, N, blocksize, false,
+                                  false><<<blockCount, blocksize>>>(
           A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     }
   }
-  SPECSMALL::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
+  REDUCEONLY::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
       (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }

@@ -25,7 +25,9 @@ __global__ void deviceReduce(T *blockResults, T *result, T alpha, T beta,
   result[n * ldc + m] = result[n * ldc + m] * beta + sum * alpha;
 }
 
-template <typename T, int M, int N, int BLOCKSIZE>
+enum class MEMPATH { GLOBAL, TEX };
+
+template <typename T, int M, int N, int BLOCKSIZE, MEMPATH mempath>
 __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
                                    size_t lda, size_t ldb, size_t ldc) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -41,7 +43,13 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
   for (size_t idx = tidx; idx < K; idx += blockDim.x * gridDim.x) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        threadSum[m][n] += A[idx * lda + m] * B[idx * ldb + n];
+        if (mempath == MEMPATH::GLOBAL) {
+          threadSum[m][n] += A[idx * lda + m] * B[idx * ldb + n];
+        }
+        if (mempath == MEMPATH::TEX) {
+          threadSum[m][n] +=
+              __ldg(A + idx * lda + m) * __ldg(B + idx * ldb + n);
+        }
       }
     }
   }
@@ -68,7 +76,7 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, size_t K,
 
 void *d_temp_storage = NULL;
 
-template <typename T, int M, int N>
+template <typename T, int M, int N, MEMPATH mempath>
 bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
@@ -78,11 +86,11 @@ bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
     GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
   if (blockCount * M * N > 100 * 100 * 1000) return false;
 
-  GENV1::blockProductKernel<T, M, N, 256><<<blockCount, 256>>>(
+  GENV1::blockProductKernel<T, M, N, 256, mempath><<<blockCount, 256>>>(
       A, B, (T *)d_temp_storage, K, lda, ldb, ldc);
 
-  GENV1::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
-      (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  //  GENV1::deviceReduce<T, M, N><<<M * N / 256 + 1, 256>>>(
+  //    (T *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }
 }

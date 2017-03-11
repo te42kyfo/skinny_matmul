@@ -1,3 +1,4 @@
+#include <cuda_profiler_api.h>
 #include <cuda_runtime.h>
 #include <sys/time.h>
 #include <algorithm>
@@ -7,11 +8,11 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
-
 #include "benchdb.hpp"
 #include "cu_complex.h"
 #include "dtime.hpp"
 #include "gpu_error.cuh"
+#include "metrics.cuh"
 #include "types.hpp"
 #include "versions.hpp"
 
@@ -63,7 +64,8 @@ void deInitMatmul() {
 double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
                      size_t K, int lda, int ldb, int ldc, size_t blockCount,
                      int iters, bool self, dtype beta) {
-  GPU_ERROR(cudaDeviceSynchronize());
+  //  GPU_ERROR(cudaProfilerStart());
+  // GPU_ERROR(cudaDeviceSynchronize());
 
   bool passed = true;
   double t1 = dtime();
@@ -82,9 +84,11 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
     }
   }
   GPU_ERROR(cudaDeviceSynchronize());
+  // GPU_ERROR(cudaProfilerStop());
   double t2 = dtime();
   double time = (t2 - t1) / iters;
 
+  //  cout << blockCount << " " << time << "\n";
   if (!passed)
     return -time;
   else
@@ -131,13 +135,11 @@ int main(int argc, char** argv) {
 
 #ifdef TSMM
   auto versions = getEnabledTSMMVersions();
-  MatmulFunctionType referenceFunction = tsmm_cublas<dtype>;
   totalB = 104 * 104;
   totalC = maxMatrixSize;
 #endif
 #ifdef TSMTTSM
   auto versions = getEnabledTSMTTSMVersions();
-  MatmulFunctionType referenceFunction = tsmttsm_cublas<dtype>;
   totalB = maxMatrixSize;
   totalC = 104 * 104;
 #endif
@@ -152,7 +154,7 @@ int main(int argc, char** argv) {
 #ifdef TSMM
       size_t ldb = M;
       size_t ldc = N;
-      size_t maxK = maxMatrixSize / max(lda, ldb);
+      size_t maxK = maxMatrixSize / max(lda, ldc);
 #endif
 #ifdef TSMTTSM
       size_t ldb = N;
@@ -161,32 +163,30 @@ int main(int argc, char** argv) {
 #endif
 
       for (auto matmulVersion : versions) {
-        size_t K = 200;
+        size_t K = maxK / 100;
         measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount, 1,
                       false, -1.0);
         double resultTime = measureMatmul(matmulVersion.first, M, N, K, lda,
                                           ldb, ldc, smCount, 1, false, -1.0);
 
-        while (resultTime > 0 && resultTime < 0.01 && K < maxK) {
+        while (resultTime > 0 && resultTime < 0.02 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
                                      ldc, smCount, 1, false, -1.0);
         }
+
         for (int self = 0; self <= (M == N || tsmm_mode ? 1 : 0); self++) {
           if (self == 1 && tsmm_mode) ldc = max(M, N);
           for (htype beta = (tsmm_mode ? 0.0 : 1.0); beta <= 1.0; beta += 1.0) {
-            int iters = 1;
-
             double bestTime = -1;
             int bestBlockCount = 0;
             for (int blockCount = 1 * smCount; blockCount <= 8 * smCount;
                  blockCount += smCount) {
-              int sampleSize = 3;
+              int sampleSize = 5;
               vector<double> times(sampleSize);
               for (int t = 0; t < sampleSize; t++) {
-                times[t] =
-                    measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
-                                  blockCount, iters, (self == 1), beta);
+                times[t] = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
+                                         ldc, blockCount, 1, (self == 1), beta);
               }
               times.erase(remove_if(begin(times), end(times),
                                     [](double time) { return time < 0; }),
@@ -205,23 +205,61 @@ int main(int argc, char** argv) {
             if (bestTime > 0) {
               if (tsmm_mode) {
                 bw = ((beta == 0 || self == 1 ? 1.0 : 2.0) * N + M) * K *
-                     sizeof(dtype) / bestTime * 1.0e-9;
+                     sizeof(dtype) / bestTime / 1.0e9;
                 flops = (M + (beta == 0 ? 0 : 1)) * K * N * flopsPerCell /
                         bestTime * 1.0e-9;
               }
+
               if (tsmttsm_mode) {
-                bw = (M + (self == 1 ? 0 : N)) * K * sizeof(dtype) / bestTime *
-                     1.0e-9;
+                bw = (M + (self == 1 ? 0 : N)) * K * sizeof(dtype) / bestTime /
+                     1.0e9;
                 flops = M * N * K * flopsPerCell / bestTime * 1.0e-9;
               }
             }
+            std::function<double()> measureMatmulFunc =
+                std::bind(measureMatmul, matmulVersion.first, M, N, K, lda, ldb,
+                          ldc, bestBlockCount, 1, (self == 1), beta);
+
+            if (bestTime < 0) continue;
+
+            double eccBW = 0, DRAMreadBW = 0, DRAMwriteBW = 0, L2readBW = 0,
+                   L2writeBW = 0, sharedLoadBW = 0, occupancy = 0;
+
+            DRAMreadBW =
+                measureMetric(measureMatmulFunc, "dram_read_throughput") / 1.e9;
+
+            DRAMwriteBW =
+                measureMetric(measureMatmulFunc, "dram_write_throughput") /
+                1.e9;
+
+            L2readBW =
+                measureMetric(measureMatmulFunc, "l2_read_throughput") / 1.e9;
+
+            L2writeBW =
+                measureMetric(measureMatmulFunc, "l2_write_throughput") / 1.e9;
+
+            sharedLoadBW =
+                measureMetric(measureMatmulFunc, "shared_load_throughput") /
+                1.e9;
+
+            occupancy = measureMetric(measureMatmulFunc, "achieved_occupancy");
+
+            eccBW = measureMetric(measureMatmulFunc, "ecc_throughput") / 1.e9;
+
             cout << multype << " " << deviceName << " " << setw(3) << M << " "
                  << setw(3) << N << " " << setw(2) << beta << "    "
-                 << (self == 1 ? "A*A" : "A*B") << "  " << matmulVersion.second
-                 << " " << setw(9) << K << "  " << setw(8) << bestBlockCount
-                 << " " << setprecision(3) << setw(8) << bestTime * 1000.0
-                 << " " << setw(5) << setprecision(3) << flops << " " << setw(5)
-                 << bw << "  \n";
+                 << (self == 1 ? "A*A" : "A*B") << "  " << setw(8)
+                 << matmulVersion.second << " " << setw(9) << K << "  "
+                 << setw(8) << bestBlockCount << " " << setprecision(3)
+                 << setw(8) << bestTime * 1000.0 << "ms "
+                 << " " << setw(5) << setprecision(3) << flops               //
+                 << "  " << setw(5) << bw                                    //
+                 << " - " << setprecision(2) << setw(5) << occupancy << " "  //
+                 << "  " << setprecision(3) << setw(5)
+                 << (DRAMreadBW + DRAMwriteBW - eccBW / 2)  //
+                 << " " << setw(5) << L2readBW + L2writeBW  //
+                 << " " << setw(5) << eccBW << "  \n";
+
             cout.flush();
             db.insert({{"multype", "\"" + multype + "\""},
                        {"device", "\"" + deviceName + "\""},
@@ -231,13 +269,20 @@ int main(int argc, char** argv) {
                        {"name", "\"" + matmulVersion.second + "\""},
                        {"inplace", to_string(self)},
                        {"zerobeta", to_string(beta == 0)},
+                       {"branch", "\"" GIT_BRANCH_NAME "\""},
                        {"usr1_name", "\"\""},
                        {"usr1_val", "\"\""}},
 
-                      {{"K", to_string(K)},
+                      {{"blockCount", to_string(bestBlockCount)},
+                       {"K", to_string(K)},
                        {"time", to_string(bestTime)},
                        {"flops", to_string(flops)},
-                       {"bw", to_string(bw)}});
+                       {"bw", to_string(bw)},
+                       {"l2bw", to_string(L2readBW + L2writeBW)},
+                       {"sharedbw", to_string(sharedLoadBW)},
+                       {"occupancy", to_string(occupancy)},
+                       {"drambw",
+                        to_string((DRAMreadBW + DRAMwriteBW - eccBW / 2))}});
           }
         }
       }
