@@ -44,6 +44,7 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
   const int BLOCKSIZE = ((1 << 15) / (M * N * 8) < 3) ? 1024 : 512;
   T Tzero;
   zero(Tzero);
+  cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
   if (eq(beta, Tzero)) {
     tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, true><<<blockCount, BLOCKSIZE>>>(
         A, B, C, K, lda, ldb, ldc, alpha, beta);
