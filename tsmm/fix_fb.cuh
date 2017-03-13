@@ -32,7 +32,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     const int o1 = row * lda;
     const int o2 = (row + K / 2) * lda;
 
-    //#pragma unroll(M % 2 == 0 ? 2 : 1)
+//#pragma unroll(M % 2 == 0 ? 2 : 1)
 #pragma unroll(2)
     for (int m = 0; m < M; m++) {
       T bV = bCache[m][n];
@@ -66,21 +66,30 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
   }
 }
 
+int constexpr cmin(int a, int b) { return a > b ? b : a; }
+int constexpr cmax(int a, int b) { return a > b ? a : b; }
+
 template <typename T, int M, int N>
 bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
                  const int K, const T *A, const int lda, const T alpha,
                  const T *B, const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N || A == C) return false;
 
-  const int BLOCKSIZE = ((1 << 15) / (M * N * 8) < 3) ? 1024 : 512;
+  // const int BLOCKSIZE = ((1 << 15) / (M * N * 8) < 2.1) ? 1024 : 512;
+
+  const int BLOCKSIZE =
+      cmin(1024, cmax(256, (2048 / (((3 << 14) / (M * N * 8))) / 32) * 32));
+
+  //  std::cout << BLOCKSIZE << "\n";
+
   T Tzero;
   zero(Tzero);
-  cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 
-  struct cudaFuncAttributes funcAttrib;
-  GPU_ERROR(cudaFuncGetAttributes(
-      &funcAttrib, tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, true>));
-  //  std::cout << funcAttrib.numRegs << " Registers\n";
+  cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+  cudaFuncSetCacheConfig(tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, true>,
+                         cudaFuncCachePreferShared);
+  cudaFuncSetCacheConfig(tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, false>,
+                         cudaFuncCachePreferShared);
 
   if (eq(beta, Tzero)) {
     tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, true><<<blockCount, BLOCKSIZE>>>(
