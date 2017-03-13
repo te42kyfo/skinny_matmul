@@ -22,15 +22,22 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
 
   int row = tidx / N;
   for (; row < K / 2; row += gridDim.x * BLOCKSIZE / N) {
-    T sum1;
+    T sum1, sum2;
     zero(sum1);
-    T sum2;
     zero(sum2);
 
-#pragma unroll(M <= 8 ? M : 4)
+    // const T *__restrict__ A1 = A + row * lda;
+    //    const T *__restrict__ A2 = A + (row + K / 2) * lda;
+
+    const int o1 = row * lda;
+    const int o2 = (row + K / 2) * lda;
+
+    //#pragma unroll(M % 2 == 0 ? 2 : 1)
+#pragma unroll(2)
     for (int m = 0; m < M; m++) {
-      sum1 = axpy(sum1, A[row * lda + m], bCache[m][n]);
-      sum2 = axpy(sum2, A[(row + K / 2) * lda + m], bCache[m][n]);
+      T bV = bCache[m][n];
+      sum1 = axpy(sum1, A[o1 + m], bV);
+      sum2 = axpy(sum2, A[o2 + m], bV);
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum1);
@@ -47,7 +54,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     T sum;
     zero(sum);
 
-#pragma unroll(M <= 8 ? M : 4)
+#pragma unroll(M <= 8 ? M : 1)
     for (int m = 0; m < M; m++) {
       sum = axpy(sum, A[row * lda + m], bCache[m][n]);
     }
@@ -69,6 +76,12 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
   T Tzero;
   zero(Tzero);
   cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+
+  struct cudaFuncAttributes funcAttrib;
+  GPU_ERROR(cudaFuncGetAttributes(
+      &funcAttrib, tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, true>));
+  //  std::cout << funcAttrib.numRegs << " Registers\n";
+
   if (eq(beta, Tzero)) {
     tsmm_fix_fb_kernel<T, M, N, BLOCKSIZE, true><<<blockCount, BLOCKSIZE>>>(
         A, B, C, K, lda, ldb, ldc, alpha, beta);
