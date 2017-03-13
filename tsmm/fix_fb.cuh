@@ -9,7 +9,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
   int n = tidx % N;
 
-  __shared__ T bCache[M][N];
+  __shared__ T bCache[64][N];
   for (int mn = threadIdx.x; mn < M * N; mn += BLOCKSIZE) {
     int tn = mn / M;
     int tm = mn % M;
@@ -25,7 +25,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     zero(sum);
 #pragma unroll(M <= 8 ? M : 4)
     for (int m = 0; m < M; m++) {
-      sum = axpy(sum, A[row * lda + m], 2.1);  // bCache[m][n]);
+      sum = axpy(sum, A[row * lda + m], bCache[m][n]);
     }
     if (BETAISZERO) {
       out[row * ldc + n] = scale(alpha, sum);
