@@ -20,10 +20,34 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
 
   if (tidx / N == gridDim.x * BLOCKSIZE / N && !BETAISZERO) return;
 
-  for (int row = tidx / N; row < K; row += gridDim.x * BLOCKSIZE / N) {
+  int row = tidx / N;
+  for (; row < K / 2; row += gridDim.x * BLOCKSIZE / N) {
+    T sum1;
+    zero(sum1);
+    T sum2;
+    zero(sum2);
+
+#pragma unroll(M <= 8 ? M : 4)
+    for (int m = 0; m < M; m++) {
+      sum1 = axpy(sum1, A[row * lda + m], bCache[m][n]);
+      sum2 = axpy(sum2, A[(row + K / 2) * lda + m], bCache[m][n]);
+    }
+    if (BETAISZERO) {
+      out[row * ldc + n] = scale(alpha, sum1);
+      out[(row + K / 2) * ldc + n] = scale(alpha, sum2);
+    } else {
+      out[row * ldc + n] = axpby(sum1, out[row * ldc + n], alpha, beta);
+      out[(row + K / 2) * ldc + n] =
+          axpby(sum2, out[(row + K / 2) * ldc + n], alpha, beta);
+    }
+  }
+
+  // remainder loop
+  for (row += K / 2; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;
     zero(sum);
-#pragma unroll(M<=8 ? M : 4)
+
+#pragma unroll(M <= 8 ? M : 4)
     for (int m = 0; m < M; m++) {
       sum = axpy(sum, A[row * lda + m], bCache[m][n]);
     }
