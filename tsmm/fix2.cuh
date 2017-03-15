@@ -24,13 +24,10 @@ static __global__ void tsmm_fix2_kernel(const T *__restrict__ A,
                                         T *__restrict__ out, const int K,
                                         const int lda, const int ldb,
                                         const int ldc, T alpha, T beta) {
-  const int GANGSIZE = 2;// / sizeof(T);
+  const int GANGSIZE = 32 / sizeof(T);
 
   int gId = threadIdx.x % GANGSIZE;
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
-
-  __shared__ T storeCache[BLOCKSIZE / GANGSIZE * N];
-  T *gangCache = storeCache + (threadIdx.x / GANGSIZE) * N;
 
   for (int row = tidx / GANGSIZE; row < K;
        row += gridDim.x * BLOCKSIZE / GANGSIZE) {
@@ -42,21 +39,15 @@ static __global__ void tsmm_fix2_kernel(const T *__restrict__ A,
         if (m < M || M % GANGSIZE == 0)
           gval = axpy(gval, A[row * lda + m], B[n * ldb + m]);
       }
-      gangCache[n] = warpReduce(gval, GANGSIZE);
-    }
-
-    for (int n = gId; n < N; n += GANGSIZE) {
       if (BETAISZERO) {
-        out[row * ldc + n] = scale(alpha, gangCache[n]);
+        out[row * ldc + n] = scale(alpha, warpReduce(gval, GANGSIZE));
       } else {
         out[row * ldc + n] =
-            axpby(gangCache[n], __ldg(out + row * ldc + n), alpha, beta);
+            axpby(warpReduce(gval, GANGSIZE), out[row * ldc + n], alpha, beta);
       }
     }
-    __syncthreads();
   }
 }
-
 
 template <typename T, int M, int N>
 bool tsmm_fix2(const size_t blockCount, const int varM, const int varN,
@@ -65,7 +56,6 @@ bool tsmm_fix2(const size_t blockCount, const int varM, const int varN,
   if (varM != M || varN != N || A == C) return false;
 
   const int BLOCKSIZE = 256;
-
 
   T Tzero;
   zero(Tzero);
