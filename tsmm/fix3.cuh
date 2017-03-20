@@ -25,7 +25,7 @@ static __global__ void tsmm_fix3_kernel(const T *__restrict__ A,
     }
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        sums[n] = axpy(sums[n], A[row * ldc + m], bCache[m][n]);
+        sums[n] = axpy(sums[n], A[row * lda + m], bCache[m][n]);
       }
     }
     for (int n = 0; n < N; n++) {
