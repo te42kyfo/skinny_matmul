@@ -8,6 +8,7 @@
 #include "tsmm/fix1.cuh"
 #include "tsmm/fix2.cuh"
 #include "tsmm/fix3.cuh"
+#include "tsmm/fix4.cuh"
 #include "tsmm/fix_blend.cuh"
 #include "tsmm/fix_fb.cuh"
 #include "tsmm/fix_ip_ghost.cuh"
@@ -62,6 +63,9 @@ getEnabledTSMMVersions() {
 #endif
 #ifdef FIX3
   versions.push_back({tsmm_fix3<dtype, PARM, PARN>, "FIX_V3"});
+#endif
+#ifdef FIX4
+  versions.push_back({tsmm_fix4<dtype, PARM, PARN>, "FIX_V4"});
 #endif
 #ifdef CUBLAS
   versions.push_back({tsmm_cublas<dtype>, "CUBLAS"});
