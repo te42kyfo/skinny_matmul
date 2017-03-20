@@ -17,6 +17,29 @@ __global__ void initKernel(double* A, size_t N) {
 }
 
 template <int N>
+__global__ void rakeStoreKernel(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
+    for (int n = 0; n < N; n++) {
+      A[idx * N + n] = 1.2;
+    }
+  }
+}
+
+template <int N>
+__global__ void rakeScaleKernel(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
+#pragma unroll(1)
+    for (int n = 0; n < N; n++) {
+      C[idx * N + n] = 1.2 * __ldg(A + idx * N + n);
+    }
+  }
+}
+
+template <int N>
 __global__ void rakeKernel(double* A, double* C, size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -72,16 +95,42 @@ __global__ void fatRakeLDGKernel(double* A, double* C, size_t K) {
   if (tidx == 0) C[tidx] = sum;
 }
 
-enum class KERNEL { rake, rakeLDG, fatRake, fatRakeLDG };
+enum class KERNEL { rake, rakeStore, rakeScale, rakeLDG, fatRake, fatRakeLDG };
 
 template <int N, KERNEL KT>
 double callKernel(double* dA, double* dC, int sizeA, int bC, int bS) {
   if (KT == KERNEL::rake) rakeKernel<N><<<bC, bS>>>(dA, dC, sizeA);
+  if (KT == KERNEL::rakeStore) rakeStoreKernel<N><<<bC, bS>>>(dA, dC, sizeA);
+  if (KT == KERNEL::rakeScale) rakeScaleKernel<N><<<bC, bS>>>(dA, dC, sizeA);
   if (KT == KERNEL::rakeLDG) rakeLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
   if (KT == KERNEL::fatRake) fatRakeKernel<N><<<bC, bS>>>(dA, dC, sizeA);
   if (KT == KERNEL::fatRakeLDG) fatRakeLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
 
   return 0.0;
+}
+
+template <int N, KERNEL KT>
+int getMaxActiveBlocks(int blockSize) {
+  int maxActiveBlocks;
+  if (KT == KERNEL::rake)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, rakeKernel<N>, blockSize, 0));
+  if (KT == KERNEL::rakeStore)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, rakeStoreKernel<N>, blockSize, 0));
+  if (KT == KERNEL::rakeScale)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, rakeScaleKernel<N>, blockSize, 0));
+  if (KT == KERNEL::rakeLDG)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, rakeLDGKernel<N>, blockSize, 0));
+  if (KT == KERNEL::fatRake)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, fatRakeKernel<N>, blockSize, 0));
+  if (KT == KERNEL::fatRakeLDG)
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, fatRakeLDGKernel<N>, blockSize, 0));
+  return maxActiveBlocks;
 }
 
 template <int N, KERNEL KT>
@@ -96,19 +145,7 @@ void measureMore(double* dA, double* dC, int sizeA) {
   int blockSize = 256;
   int K = sizeA / N;
 
-  int maxActiveBlocks;
-  if (KT == KERNEL::rake)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeKernel<N>, blockSize, 0));
-  if (KT == KERNEL::rakeLDG)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeLDGKernel<N>, blockSize, 0));
-  if (KT == KERNEL::fatRake)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, fatRakeKernel<N>, blockSize, 0));
-  if (KT == KERNEL::fatRakeLDG)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, fatRakeLDGKernel<N>, blockSize, 0));
+  int maxActiveBlocks = getMaxActiveBlocks<N, KT>(blockSize);
 
   std::function<double()> measureLoadFunction = std::bind(
       callKernel<N, KT>, dA, dC, K, maxActiveBlocks * smCount, blockSize);
@@ -155,30 +192,30 @@ void measureLess(double* dA, double* dC, int sizeA) {
   int blockSize = 1024;
   int K = sizeA / N;
 
-  int maxActiveBlocks;
+  int maxActiveBlocks = getMaxActiveBlocks<N, KT>(blockSize);
   string kernelMultype;
   string kernelName;
   if (KT == KERNEL::rake) {
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeKernel<N>, blockSize, 0));
     kernelMultype = "rake";
     kernelName = "rake";
   }
+  if (KT == KERNEL::rakeStore) {
+    kernelMultype = "rakeStore";
+    kernelName = "rakeStore";
+  }
+  if (KT == KERNEL::rakeScale) {
+    kernelMultype = "rakeScale";
+    kernelName = "rakeScale";
+  }
   if (KT == KERNEL::rakeLDG) {
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeLDGKernel<N>, blockSize, 0));
     kernelMultype = "rake";
     kernelName = "rakeLDG";
   }
   if (KT == KERNEL::fatRake) {
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, fatRakeKernel<N>, blockSize, 0));
     kernelMultype = "fatRake";
     kernelName = "fatRake";
   }
   if (KT == KERNEL::fatRakeLDG) {
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, fatRakeLDGKernel<N>, blockSize, 0));
     kernelMultype = "fatRake";
     kernelName = "fatRakeLDG";
   }
@@ -194,11 +231,15 @@ void measureLess(double* dA, double* dC, int sizeA) {
   double dt = t2 - t1;
 
   double appBW = (size_t)N * K * sizeof(double) / dt * 1e-9;
-  double L2BW = measureMetric(measureLoadFunction, "l2_read_throughput") / 1.e9;
-  double texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
 
-  cout << setprecision(3) << setw(5) << appBW << " " << setw(5) << L2BW << " "
-       << setw(5) << texHitrate << " ";
+  double L2BW, texHitrate;
+  L2BW = (measureMetric(measureLoadFunction, "l2_read_throughput") +
+          measureMetric(measureLoadFunction, "l2_write_throughput")) /
+         1.e9;
+  texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
+
+  cout << setprecision(3) << setw(4) << dt << " " << setw(5) << appBW << " "
+       << setw(5) << L2BW << " " << setw(5) << texHitrate << " | ";
   dbptr->insert({{"multype", "\"" + kernelMultype + "\""},
                  {"device", "\"" + deviceName + "\""},
                  {"M", to_string(N)},
@@ -214,6 +255,8 @@ template <int N>
 void measureAll(double* dA, double* dC, size_t sizeA) {
   cout << setw(3) << N << " ";
   measureLess<N, KERNEL::rake>(dA, dC, sizeA);
+  measureLess<N, KERNEL::rakeStore>(dA, dC, sizeA);
+  measureLess<N, KERNEL::rakeScale>(dA, dC, sizeA);
   measureLess<N, KERNEL::rakeLDG>(dA, dC, sizeA);
   measureLess<N, KERNEL::fatRake>(dA, dC, sizeA);
   measureLess<N, KERNEL::fatRakeLDG>(dA, dC, sizeA);
@@ -226,7 +269,7 @@ int main(int argc, char** argv) {
   dbptr = &db;
 
   size_t sizeA = 1 * ((size_t)1 << 30) / sizeof(double);
-  size_t sizeC = 256 * 2000;
+  size_t sizeC = 1 * ((size_t)1 << 30) / sizeof(double);
   double* dA;
   double* dC;
   GPU_ERROR(cudaMalloc(&dA, sizeof(double) * sizeA));
@@ -234,6 +277,7 @@ int main(int argc, char** argv) {
   initKernel<<<52, 256>>>(dA, sizeA);
   initKernel<<<52, 256>>>(dC, sizeC);
 
+  measureAll<1>(dA, dC, sizeA);
   measureAll<2>(dA, dC, sizeA);
   measureAll<3>(dA, dC, sizeA);
   measureAll<4>(dA, dC, sizeA);
