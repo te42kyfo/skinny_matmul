@@ -19,7 +19,6 @@ __global__ void initKernel(double* A, size_t N) {
 template <int N>
 __global__ void rakeStoreKernel(double* A, double* C, size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
-
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
     for (int n = 0; n < N; n++) {
       A[idx * N + n] = 1.2;
@@ -95,46 +94,18 @@ __global__ void fatRakeLDGKernel(double* A, double* C, size_t K) {
   if (tidx == 0) C[tidx] = sum;
 }
 
-enum class KERNEL { rake, rakeStore, rakeScale, rakeLDG, fatRake, fatRakeLDG };
-
-template <int N, KERNEL KT>
-double callKernel(double* dA, double* dC, int sizeA, int bC, int bS) {
-  if (KT == KERNEL::rake) rakeKernel<N><<<bC, bS>>>(dA, dC, sizeA);
-  if (KT == KERNEL::rakeStore) rakeStoreKernel<N><<<bC, bS>>>(dA, dC, sizeA);
-  if (KT == KERNEL::rakeScale) rakeScaleKernel<N><<<bC, bS>>>(dA, dC, sizeA);
-  if (KT == KERNEL::rakeLDG) rakeLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
-  if (KT == KERNEL::fatRake) fatRakeKernel<N><<<bC, bS>>>(dA, dC, sizeA);
-  if (KT == KERNEL::fatRakeLDG) fatRakeLDGKernel<N><<<bC, bS>>>(dA, dC, sizeA);
-
+double callKernel(void* func, double* dA, double* dC, size_t sizeA, int bC,
+                  int bS) {
+  cudaConfigureCall(bC, bS);
+  cudaSetupArgument(dA, 0);
+  cudaSetupArgument(dC, 8);
+  cudaSetupArgument(sizeA, 16);
+  cudaLaunch(func);
   return 0.0;
 }
 
-template <int N, KERNEL KT>
-int getMaxActiveBlocks(int blockSize) {
-  int maxActiveBlocks;
-  if (KT == KERNEL::rake)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeKernel<N>, blockSize, 0));
-  if (KT == KERNEL::rakeStore)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeStoreKernel<N>, blockSize, 0));
-  if (KT == KERNEL::rakeScale)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeScaleKernel<N>, blockSize, 0));
-  if (KT == KERNEL::rakeLDG)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, rakeLDGKernel<N>, blockSize, 0));
-  if (KT == KERNEL::fatRake)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, fatRakeKernel<N>, blockSize, 0));
-  if (KT == KERNEL::fatRakeLDG)
-    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, fatRakeLDGKernel<N>, blockSize, 0));
-  return maxActiveBlocks;
-}
-
-template <int N, KERNEL KT>
-void measureMore(double* dA, double* dC, int sizeA) {
+void measureMore(void* func, int N, string kernelName, double* dA, double* dC,
+                 int sizeA) {
   cudaDeviceProp prop;
   int deviceId;
   GPU_ERROR(cudaGetDevice(&deviceId));
@@ -145,10 +116,12 @@ void measureMore(double* dA, double* dC, int sizeA) {
   int blockSize = 256;
   int K = sizeA / N;
 
-  int maxActiveBlocks = getMaxActiveBlocks<N, KT>(blockSize);
+  int maxActiveBlocks = 0;
+  GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxActiveBlocks,
+                                                          func, blockSize, 0));
 
   std::function<double()> measureLoadFunction = std::bind(
-      callKernel<N, KT>, dA, dC, K, maxActiveBlocks * smCount, blockSize);
+      callKernel, func, dA, dC, K, maxActiveBlocks * smCount, blockSize);
 
   GPU_ERROR(cudaDeviceSynchronize());
   double t1 = dtime();
@@ -166,22 +139,24 @@ void measureMore(double* dA, double* dC, int sizeA) {
 
   double appBW = (size_t)N * K * sizeof(double) / dt * 1e-9;
 
-  cout << setprecision(3) << setw(3) << N << " " << setw(3)
-       << maxActiveBlocks * smCount << " " << setw(5) << dt * 1000 << "ms  "  //
-       << setw(7) << appBW << " "                                             //
-       << setw(7) << (readBW - eccBW / 2) / 1.e9 << " "                       //
-       << setw(7) << L2BW / 1.0e9 << " "                                      //
-       << setw(7) << L2hitrate << "% "                                        //
-       << setw(7) << L2BW / appBW / 1.0e9 << "x "                             //
-       << setw(7) << L2BW / 758.0e6 / 13 << "B/c "                            //
-       << setprecision(4) << setw(7) << texBW / 1.0e9 << " "                  //
-       << setprecision(3) << setw(7) << texBW / appBW / 1.0e9 << "x "         //
-       << setprecision(4) << setw(7) << texHitrate << "% "                    //
+  cout << setprecision(3) << setw(3) << N << " " << setw(12) << kernelName
+       << " "
+       << " " << setw(3) << maxActiveBlocks * smCount << " " << setw(5)
+       << dt * 1000 << "ms  "                                          //
+       << setw(7) << appBW << " "                                      //
+       << setw(7) << (readBW - eccBW / 2) / 1.e9 << " "                //
+       << setw(7) << L2BW / 1.0e9 << " "                               //
+       << setw(7) << L2hitrate << "% "                                 //
+       << setw(7) << L2BW / appBW / 1.0e9 << "x "                      //
+       << setw(7) << L2BW / 758.0e6 / 13 << "B/c "                     //
+       << setprecision(4) << setw(7) << texBW / 1.0e9 << " "           //
+       << setprecision(3) << setw(7) << texBW / appBW / 1.0e9 << "x "  //
+       << setprecision(4) << setw(7) << texHitrate << "% "             //
        << setprecision(3) << setw(7) << texBW / 758.06e6 / 13 << "B/c\n";
 }
 
-template <int N, KERNEL KT>
-void measureLess(double* dA, double* dC, int sizeA) {
+void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
+                 int sizeA) {
   cudaDeviceProp prop;
   int deviceId;
   GPU_ERROR(cudaGetDevice(&deviceId));
@@ -192,36 +167,12 @@ void measureLess(double* dA, double* dC, int sizeA) {
   int blockSize = 1024;
   int K = sizeA / N;
 
-  int maxActiveBlocks = getMaxActiveBlocks<N, KT>(blockSize);
-  string kernelMultype;
-  string kernelName;
-  if (KT == KERNEL::rake) {
-    kernelMultype = "rake";
-    kernelName = "rake";
-  }
-  if (KT == KERNEL::rakeStore) {
-    kernelMultype = "rakeStore";
-    kernelName = "rakeStore";
-  }
-  if (KT == KERNEL::rakeScale) {
-    kernelMultype = "rakeScale";
-    kernelName = "rakeScale";
-  }
-  if (KT == KERNEL::rakeLDG) {
-    kernelMultype = "rake";
-    kernelName = "rakeLDG";
-  }
-  if (KT == KERNEL::fatRake) {
-    kernelMultype = "fatRake";
-    kernelName = "fatRake";
-  }
-  if (KT == KERNEL::fatRakeLDG) {
-    kernelMultype = "fatRake";
-    kernelName = "fatRakeLDG";
-  }
+  int maxActiveBlocks = 0;
+  GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxActiveBlocks,
+                                                          func, blockSize, 0));
 
   std::function<double()> measureLoadFunction = std::bind(
-      callKernel<N, KT>, dA, dC, K, maxActiveBlocks * smCount, blockSize);
+      callKernel, func, dA, dC, K, maxActiveBlocks * smCount, blockSize);
 
   GPU_ERROR(cudaDeviceSynchronize());
   double t1 = dtime();
@@ -238,9 +189,9 @@ void measureLess(double* dA, double* dC, int sizeA) {
          1.e9;
   texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
 
-  cout << setprecision(3) << setw(4) << dt << " " << setw(5) << appBW << " "
-       << setw(5) << L2BW << " " << setw(5) << texHitrate << " | ";
-  dbptr->insert({{"multype", "\"" + kernelMultype + "\""},
+  cout << setprecision(3) << setw(8) << dt << " " << setw(5) << appBW << " "
+       << setw(5) << L2BW << " " << setw(6) << texHitrate << " | ";
+  dbptr->insert({{"multype", "\"stream\""},
                  {"device", "\"" + deviceName + "\""},
                  {"M", to_string(N)},
                  {"N", to_string(N)},
@@ -254,22 +205,25 @@ void measureLess(double* dA, double* dC, int sizeA) {
 template <int N>
 void measureAll(double* dA, double* dC, size_t sizeA) {
   cout << setw(3) << N << " ";
-  measureLess<N, KERNEL::rake>(dA, dC, sizeA);
-  measureLess<N, KERNEL::rakeStore>(dA, dC, sizeA);
-  measureLess<N, KERNEL::rakeScale>(dA, dC, sizeA);
-  measureLess<N, KERNEL::rakeLDG>(dA, dC, sizeA);
-  measureLess<N, KERNEL::fatRake>(dA, dC, sizeA);
-  measureLess<N, KERNEL::fatRakeLDG>(dA, dC, sizeA);
-
+  measureLess((void*)(rakeStoreKernel<N>), N, "rakeStore", dA, dC, sizeA);
+  measureLess((void*)(rakeLDGKernel<N>), N, "rakeLDG", dA, dC, sizeA);
   cout << "\n";
 }
+
+template <int MAXN>
+void measureSeries(double* dA, double* dC, size_t sizeA) {
+  measureSeries<MAXN - 1>( dA, dC, sizeA);
+  measureAll<MAXN>(dA, dC, sizeA);
+}
+template <>
+void measureSeries<0>( double* dA, double* dC, size_t sizeA) {}
 
 int main(int argc, char** argv) {
   BenchDB db("../benchmarks.db");
   dbptr = &db;
 
   size_t sizeA = 1 * ((size_t)1 << 30) / sizeof(double);
-  size_t sizeC = 1 * ((size_t)1 << 30) / sizeof(double);
+  size_t sizeC = sizeA;
   double* dA;
   double* dC;
   GPU_ERROR(cudaMalloc(&dA, sizeof(double) * sizeA));
@@ -277,68 +231,5 @@ int main(int argc, char** argv) {
   initKernel<<<52, 256>>>(dA, sizeA);
   initKernel<<<52, 256>>>(dC, sizeC);
 
-  measureAll<1>(dA, dC, sizeA);
-  measureAll<2>(dA, dC, sizeA);
-  measureAll<3>(dA, dC, sizeA);
-  measureAll<4>(dA, dC, sizeA);
-  measureAll<5>(dA, dC, sizeA);
-  measureAll<6>(dA, dC, sizeA);
-  measureAll<7>(dA, dC, sizeA);
-  measureAll<8>(dA, dC, sizeA);
-  measureAll<9>(dA, dC, sizeA);
-  measureAll<10>(dA, dC, sizeA);
-  measureAll<11>(dA, dC, sizeA);
-  measureAll<12>(dA, dC, sizeA);
-  measureAll<13>(dA, dC, sizeA);
-  measureAll<14>(dA, dC, sizeA);
-  measureAll<15>(dA, dC, sizeA);
-  measureAll<16>(dA, dC, sizeA);
-  measureAll<17>(dA, dC, sizeA);
-  measureAll<18>(dA, dC, sizeA);
-  measureAll<19>(dA, dC, sizeA);
-  measureAll<20>(dA, dC, sizeA);
-  measureAll<21>(dA, dC, sizeA);
-  measureAll<22>(dA, dC, sizeA);
-  measureAll<23>(dA, dC, sizeA);
-  measureAll<24>(dA, dC, sizeA);
-  measureAll<25>(dA, dC, sizeA);
-  measureAll<26>(dA, dC, sizeA);
-  measureAll<27>(dA, dC, sizeA);
-  measureAll<28>(dA, dC, sizeA);
-  measureAll<29>(dA, dC, sizeA);
-  measureAll<30>(dA, dC, sizeA);
-  measureAll<31>(dA, dC, sizeA);
-  measureAll<32>(dA, dC, sizeA);
-  measureAll<33>(dA, dC, sizeA);
-  measureAll<34>(dA, dC, sizeA);
-  measureAll<35>(dA, dC, sizeA);
-  measureAll<36>(dA, dC, sizeA);
-  measureAll<37>(dA, dC, sizeA);
-  measureAll<38>(dA, dC, sizeA);
-  measureAll<39>(dA, dC, sizeA);
-  measureAll<40>(dA, dC, sizeA);
-  measureAll<41>(dA, dC, sizeA);
-  measureAll<42>(dA, dC, sizeA);
-  measureAll<43>(dA, dC, sizeA);
-  measureAll<44>(dA, dC, sizeA);
-  measureAll<45>(dA, dC, sizeA);
-  measureAll<46>(dA, dC, sizeA);
-  measureAll<47>(dA, dC, sizeA);
-  measureAll<48>(dA, dC, sizeA);
-  measureAll<49>(dA, dC, sizeA);
-  measureAll<50>(dA, dC, sizeA);
-  measureAll<51>(dA, dC, sizeA);
-  measureAll<52>(dA, dC, sizeA);
-  measureAll<53>(dA, dC, sizeA);
-  measureAll<54>(dA, dC, sizeA);
-  measureAll<55>(dA, dC, sizeA);
-  measureAll<56>(dA, dC, sizeA);
-  measureAll<57>(dA, dC, sizeA);
-  measureAll<58>(dA, dC, sizeA);
-  measureAll<59>(dA, dC, sizeA);
-  measureAll<60>(dA, dC, sizeA);
-  measureAll<61>(dA, dC, sizeA);
-  measureAll<62>(dA, dC, sizeA);
-  measureAll<63>(dA, dC, sizeA);
-  measureAll<64>(dA, dC, sizeA);
+  measureSeries<20>(dA, dC, sizeA);
 }
