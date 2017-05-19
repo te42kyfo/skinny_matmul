@@ -16,6 +16,18 @@ __global__ void initKernel(double* A, size_t N) {
   }
 }
 
+
+__global__ void test_kernel(double* A) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  double localSum = 0.0;
+#pragma unroll(4)
+  for( int i = 0; i < 256; i++) {
+    localSum += A[i]; //__ldg(A + i);
+  }
+  A[tidx] = localSum;
+}
+
 template <int iters>
 __global__ void LDS_kernel(double* A, int K) {
   asm(".shared .f64 rowCache[64];\n\t");
