@@ -17,6 +17,64 @@ __global__ void initKernel(double* A, size_t N) {
 }
 
 template <int N>
+__global__ void copyKernel(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  for (int idx = tidx; idx < K / 2 / 4; idx += gridDim.x * blockDim.x) {
+    A[idx] = __ldg(C + idx);
+    A[idx + K / 4] = __ldg(C + K / 4 + idx);
+    A[idx + K / 4 * 2] = __ldg(C + K / 4 * 2 + idx);
+    A[idx + K / 4 * 3] = __ldg(C + K / 4 * 3 + idx);
+  }
+}
+
+template <int N>
+__global__ void scaleKernel(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  for (int idx = tidx; idx < K / 2; idx += gridDim.x * blockDim.x) {
+    A[idx] = C[idx] * 1.2;
+  }
+}
+
+template <int N>
+__global__ void updateKernel(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  for (int idx = tidx; idx < K / 2; idx += gridDim.x * blockDim.x) {
+    A[idx] = A[idx] * 1.2;
+  }
+}
+
+template <int N>
+__global__ void triadKernel(double* A, double* C, size_t K) {
+  double* B = C + K;
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  for (int idx = tidx; idx < K / 3 / 2; idx += gridDim.x * blockDim.x) {
+    A[idx] = B[idx] * 1.2 + C[idx];
+    A[idx + K / 2] = B[idx + K / 2] * 1.2 + C[idx + K / 2];
+  }
+}
+
+template <int N>
+__global__ void reduceKernel(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  double sum = 0.0;
+  for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
+    sum += A[idx];
+   }
+  if (tidx == 123123) C[tidx] = sum;
+}
+
+template <int N>
+__global__ void reduceKernelUnroll(double* A, double* C, size_t K) {
+  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  double sum = 0.0;
+  for (int idx = tidx; idx < K / 2; idx += gridDim.x * blockDim.x) {
+    sum += A[idx];
+    sum += A[idx + K / 2];
+  }
+  if (tidx == 123123) C[tidx] = sum;
+}
+
+template <int N>
 __global__ void rakeStoreKernel(double* A, double* C, size_t K) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
@@ -130,9 +188,11 @@ void measureMore(void* func, int N, string kernelName, double* dA, double* dC,
   double t2 = dtime();
   double dt = t2 - t1;
 
-  double readBW = measureMetric(measureLoadFunction, "dram_read_throughput");
+  double readBW = measureMetric(measureLoadFunction, "dram_read_throughput") +
+                  measureMetric(measureLoadFunction, "dram_write_throughput");
   double eccBW = measureMetric(measureLoadFunction, "ecc_throughput");
-  double L2BW = measureMetric(measureLoadFunction, "l2_read_throughput");
+  double L2BW = measureMetric(measureLoadFunction, "l2_read_throughput") +
+                measureMetric(measureLoadFunction, "l2_write_throughput");
   double L2hitrate = measureMetric(measureLoadFunction, "l2_tex_read_hit_rate");
   double texBW = measureMetric(measureLoadFunction, "tex_cache_throughput");
   double texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
@@ -204,32 +264,32 @@ void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
 
 template <int N>
 void measureAll(double* dA, double* dC, size_t sizeA) {
-  cout << setw(3) << N << " ";
-  measureLess((void*)(rakeStoreKernel<N>), N, "rakeStore", dA, dC, sizeA);
-  measureLess((void*)(rakeLDGKernel<N>), N, "rakeLDG", dA, dC, sizeA);
-  cout << "\n";
+  //  cout << setw(3) << N << " ";
+  measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
+  measureMore((void*)(scaleKernel<N>), N, "scale", dA, dC, sizeA);
+  measureMore((void*)(updateKernel<N>), N, "update", dA, dC, sizeA);
+  measureMore((void*)(triadKernel<N>), N, "triad", dA, dC, sizeA);
+  measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
+  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC, sizeA);
+  // cout << "\n";
 }
 
 template <int MAXN>
 void measureSeries(double* dA, double* dC, size_t sizeA) {
-  measureSeries<MAXN - 1>( dA, dC, sizeA);
+  measureSeries<MAXN - 1>(dA, dC, sizeA);
   measureAll<MAXN>(dA, dC, sizeA);
 }
 template <>
-void measureSeries<0>( double* dA, double* dC, size_t sizeA) {}
+void measureSeries<0>(double* dA, double* dC, size_t sizeA) {}
 
 int main(int argc, char** argv) {
   BenchDB db("../benchmarks.db");
   dbptr = &db;
 
   size_t sizeA = 1 * ((size_t)1 << 30) / sizeof(double);
-  size_t sizeC = sizeA;
   double* dA;
-  double* dC;
-  GPU_ERROR(cudaMalloc(&dA, sizeof(double) * sizeA));
-  GPU_ERROR(cudaMalloc(&dC, sizeof(double) * sizeC));
-  initKernel<<<52, 256>>>(dA, sizeA);
-  initKernel<<<52, 256>>>(dC, sizeC);
+  GPU_ERROR(cudaMalloc(&dA, 3 * sizeof(double) * sizeA));
+  initKernel<<<52, 256>>>(dA, 3 * sizeA);
 
-  measureSeries<20>(dA, dC, sizeA);
+  measureSeries<1>(dA, dA + sizeA, sizeA);
 }
