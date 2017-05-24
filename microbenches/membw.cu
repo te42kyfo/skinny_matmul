@@ -59,7 +59,7 @@ __global__ void reduceKernel(double* A, double* C, size_t K) {
   double sum = 0.0;
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
     sum += A[idx];
-   }
+  }
   if (tidx == 123123) C[tidx] = sum;
 }
 
@@ -191,6 +191,11 @@ void measureMore(void* func, int N, string kernelName, double* dA, double* dC,
   double readBW = measureMetric(measureLoadFunction, "dram_read_throughput") +
                   measureMetric(measureLoadFunction, "dram_write_throughput");
   double eccBW = measureMetric(measureLoadFunction, "ecc_throughput");
+  double dramBW =
+      ((measureMetric(measureLoadFunction, "dram_read_throughput") +
+        measureMetric(measureLoadFunction, "dram_write_throughput")) -
+       eccBW / 2) *
+      1.e-9;
   double L2BW = measureMetric(measureLoadFunction, "l2_read_throughput") +
                 measureMetric(measureLoadFunction, "l2_write_throughput");
   double L2hitrate = measureMetric(measureLoadFunction, "l2_tex_read_hit_rate");
@@ -204,7 +209,7 @@ void measureMore(void* func, int N, string kernelName, double* dA, double* dC,
        << " " << setw(3) << maxActiveBlocks * smCount << " " << setw(5)
        << dt * 1000 << "ms  "                                          //
        << setw(7) << appBW << " "                                      //
-       << setw(7) << (readBW - eccBW / 2) / 1.e9 << " "                //
+       << setw(7) << dramBW << " "                                     //
        << setw(7) << L2BW / 1.0e9 << " "                               //
        << setw(7) << L2hitrate << "% "                                 //
        << setw(7) << L2BW / appBW / 1.0e9 << "x "                      //
@@ -213,6 +218,17 @@ void measureMore(void* func, int N, string kernelName, double* dA, double* dC,
        << setprecision(3) << setw(7) << texBW / appBW / 1.0e9 << "x "  //
        << setprecision(4) << setw(7) << texHitrate << "% "             //
        << setprecision(3) << setw(7) << texBW / 758.06e6 / 13 << "B/c\n";
+
+  dbptr->insert({{"multype", "\"stream\""},
+                 {"device", "\"" + deviceName + "\""},
+                 {"M", to_string(N)},
+                 {"N", to_string(N)},
+                 {"name", "\"" + kernelName + "\""}},
+                {{"K", to_string(K)},
+                 {"time", to_string(dt)},
+                 {"bw", to_string(appBW)},
+                 {"l2bw", to_string(L2BW)},
+                 {"drambw", to_string(dramBW)}});
 }
 
 void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
@@ -224,7 +240,7 @@ void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
   std::string deviceName = prop.name;
   int smCount = prop.multiProcessorCount;
 
-  int blockSize = 1024;
+  int blockSize = 256;
   int K = sizeA / N;
 
   int maxActiveBlocks = 0;
@@ -249,7 +265,7 @@ void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
          1.e9;
   texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
 
-  cout << setprecision(3) << setw(8) << dt << " " << setw(5) << appBW << " "
+  cout << setprecision(3) << setw(5) << dt*1000 << " " << setw(5) << appBW << " "
        << setw(5) << L2BW << " " << setw(6) << texHitrate << " | ";
   dbptr->insert({{"multype", "\"stream\""},
                  {"device", "\"" + deviceName + "\""},
@@ -262,16 +278,24 @@ void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
                  {"l2bw", to_string(L2BW)}});
 }
 
+
+
 template <int N>
 void measureAll(double* dA, double* dC, size_t sizeA) {
   //  cout << setw(3) << N << " ";
-  measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
-  measureMore((void*)(scaleKernel<N>), N, "scale", dA, dC, sizeA);
-  measureMore((void*)(updateKernel<N>), N, "update", dA, dC, sizeA);
-  measureMore((void*)(triadKernel<N>), N, "triad", dA, dC, sizeA);
-  measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
-  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC, sizeA);
-  // cout << "\n";
+  measureLess((void*)(rakeKernel<N>), N, "rake", dA, dC, sizeA);
+  measureLess((void*)(rakeLDGKernel<N>), N, "rakeLDG", dA, dC, sizeA);
+  measureLess((void*)(fatRakeKernel<N>), N, "fatRake", dA, dC, sizeA);
+  measureLess((void*)(fatRakeLDGKernel<N>), N, "fatRakeLDG", dA, dC, sizeA);
+
+  // measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
+  // measureMore((void*)(scaleKernel<N>), N, "scale", dA, dC, sizeA);
+  // measureMore((void*)(updateKernel<N>), N, "update", dA, dC, sizeA);
+  // measureMore((void*)(triadKernel<N>), N, "triad", dA, dC, sizeA);
+  // measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
+  //  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC,
+  //  sizeA);
+   cout << "\n";
 }
 
 template <int MAXN>
@@ -291,5 +315,5 @@ int main(int argc, char** argv) {
   GPU_ERROR(cudaMalloc(&dA, 3 * sizeof(double) * sizeA));
   initKernel<<<52, 256>>>(dA, 3 * sizeA);
 
-  measureSeries<1>(dA, dA + sizeA, sizeA);
+  measureSeries<32>(dA, dA + sizeA, sizeA);
 }
