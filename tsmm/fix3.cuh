@@ -19,10 +19,14 @@ static __global__ __launch_bounds__(BLOCKSIZE) void tsmm_fix3_kernel(
 
   for (int row = tidx; row < K; row += gridDim.x * blockDim.x) {
 
+    T avals[M];
+    for (int m = 0; m < M; m++) {
+      avals[m] = A[row * lda + m];
+    }
     for (int n = 0; n < N; n++) {
       T sums;
       for (int m = 0; m < M; m++) {
-        sums = axpy(sums, A[row * lda + m], bCache[m][n]);
+        sums = axpy(sums, avals[m], bCache[m][n]);
       }
 
       if (BETAISZERO) {
@@ -41,7 +45,7 @@ bool tsmm_fix3(const size_t blockCount, const int varM, const int varN,
                const T *B, const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N || A == C) return false;
 
-  const int BLOCKSIZE = 512;
+  const int BLOCKSIZE = 128;
 
   struct cudaFuncAttributes funcAttrib;
   cudaFuncGetAttributes(&funcAttrib,
