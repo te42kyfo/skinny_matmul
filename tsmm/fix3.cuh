@@ -7,7 +7,7 @@ static __global__ __launch_bounds__(BLOCKSIZE) void tsmm_fix3_kernel(
     const int K, const int lda, const int ldb, const int ldc, T alpha, T beta) {
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
 
-  __shared__ __volatile__ T bCache[M][N];
+  __shared__  T bCache[M][N + (N%2==0 ? 1 : 0)];
 #pragma unroll(1)
   for (int mn = threadIdx.x; mn < M * N; mn += BLOCKSIZE) {
     int tn = mn / M;
