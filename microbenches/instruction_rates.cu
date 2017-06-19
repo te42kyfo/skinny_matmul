@@ -78,17 +78,17 @@ void LDS() {
       << setprecision(4) << setw(7) << shmemThroughput / 1.e9 << "\n";
 }
 
+template <size_t bufferSize>
 __global__ void L2LatencyKernel(double* A, size_t innerIterations) {
   size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  size_t bufferSize = 1024 * 1024;
   double sum = 0;
 #pragma unroll(1)
   for (int i = 0; i < innerIterations / bufferSize; i++) {
 #pragma unroll(1)
     for (int n = 0; n < bufferSize; n++) {
-      size_t idx = (tidx + n * 32) % bufferSize;
-      sum += A[idx];
+      size_t idx = (tidx + n * blockDim.x * gridDim.x) % bufferSize;
+      sum += __ldg(A + idx);
     }
   }
 
@@ -103,6 +103,7 @@ double callKernel(void* func, double* dA, size_t K, int bC, int bS) {
   return 0.0;
 }
 
+template <size_t bufferSize>
 void L2Latency() {
   cudaDeviceProp prop;
   int deviceId;
@@ -112,7 +113,8 @@ void L2Latency() {
 
   size_t innerIterations = 1024 * 1024;
   std::function<double()> callKernelFunc =
-      std::bind(callKernel, (void*)L2LatencyKernel, dA, innerIterations, 1*13, 32);
+      std::bind(callKernel, (void*)L2LatencyKernel<bufferSize>, dA,
+                innerIterations, 1, 64);
 
   callKernelFunc();
   GPU_ERROR(cudaDeviceSynchronize());
@@ -124,18 +126,24 @@ void L2Latency() {
   double L2BW = (measureMetric(callKernelFunc, "l2_read_throughput") +
                  measureMetric(callKernelFunc, "l2_write_throughput")) /
                 1.e9;
-  double L2hitrate = measureMetric(callKernelFunc, "l2_l1_read_hit_rate");
+  double texHitrate = measureMetric(callKernelFunc, "tex_cache_hit_rate");
+
+  double L2hitrate = measureMetric(callKernelFunc, "l2_l1_read_hit_rate") +
+                     measureMetric(callKernelFunc, "l2_tex_read_hit_rate");
 
   double dt = t2 - t1;
   double clock = prop.clockRate * 1.0e3;
-  cout << deviceName << "  " << dt * 1000 << "ms  " << clock / 1.e9 << "GHz  "
-       << L2BW << "GB/s  " << L2hitrate << "%  " << dt * clock / innerIterations
-       << "cyc\n";
+  cout << "Latency: " << deviceName << "  "
+       << bufferSize * sizeof(double) / 1024 << "kB  " << dt * 1000 << "ms  "
+       << clock / 1.e9 << "GHz  " << L2BW << "GB/s  " << L2hitrate << "%  "
+       << texHitrate << "%  " << dt * clock / innerIterations << "cyc\n";
 }
 
 int main(int argc, char** argv) {
   GPU_ERROR(cudaMalloc(&dA, sizeof(double) * sizeA));
   initKernel<<<52, 256>>>(dA, sizeA);
   LDS();
-  L2Latency();
+  L2Latency<2 * 1024>();
+  L2Latency<4 * 1024>();
+  L2Latency<512 * 1024>();
 }

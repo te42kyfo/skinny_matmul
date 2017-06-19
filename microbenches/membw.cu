@@ -265,8 +265,8 @@ void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
          1.e9;
   texHitrate = measureMetric(measureLoadFunction, "tex_cache_hit_rate");
 
-  cout << setprecision(3) << setw(5) << dt*1000 << " " << setw(5) << appBW << " "
-       << setw(5) << L2BW << " " << setw(6) << texHitrate << " | ";
+  cout << setprecision(3) << setw(5) << dt * 1000 << "ms  " << setw(5) << appBW
+       << " " << setw(5) << L2BW << " " << setw(6) << texHitrate << " | ";
   dbptr->insert({{"multype", "\"stream\""},
                  {"device", "\"" + deviceName + "\""},
                  {"M", to_string(N)},
@@ -278,11 +278,9 @@ void measureLess(void* func, int N, string kernelName, double* dA, double* dC,
                  {"l2bw", to_string(L2BW)}});
 }
 
-
-
 template <int N>
 void measureAll(double* dA, double* dC, size_t sizeA) {
-  //  cout << setw(3) << N << " ";
+  cout << setw(3) << N << " ";
   measureLess((void*)(rakeKernel<N>), N, "rake", dA, dC, sizeA);
   measureLess((void*)(rakeLDGKernel<N>), N, "rakeLDG", dA, dC, sizeA);
   measureLess((void*)(fatRakeKernel<N>), N, "fatRake", dA, dC, sizeA);
@@ -295,7 +293,7 @@ void measureAll(double* dA, double* dC, size_t sizeA) {
   // measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
   //  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC,
   //  sizeA);
-   cout << "\n";
+  cout << "\n";
 }
 
 template <int MAXN>
