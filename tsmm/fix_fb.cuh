@@ -1,5 +1,6 @@
 #pragma once
 #include "../eq.cuh"
+#include "../cminmax.h"
 
 template <typename T, int M, int N, int BLOCKSIZE, bool BETAISZERO>
 static __global__ void __launch_bounds__(BLOCKSIZE)
@@ -9,7 +10,8 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
   int tidx = blockIdx.x * BLOCKSIZE + threadIdx.x;
   int n = tidx % N;
 
-  __shared__ T bCache[M][N];
+  __shared__ __volatile__ T bCache[M][N];
+#pragma unroll(1)
   for (int mn = threadIdx.x; mn < M * N; mn += BLOCKSIZE) {
     int tn = mn / M;
     int tm = mn % M;
@@ -33,7 +35,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     const int o2 = (row + K / 2) * lda;
 
 //#pragma unroll(M % 2 == 0 ? 2 : 1)
-#pragma unroll(2)
+//#pragma unroll(2)
     for (int m = 0; m < M; m++) {
       T bV = bCache[m][n];
       sum1 = axpy(sum1, A[o1 + m], bV);
@@ -49,6 +51,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     }
   }
 
+  
   // remainder loop
   for (row += K / 2; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;
@@ -66,8 +69,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
   }
 }
 
-int constexpr cmin(int a, int b) { return a > b ? b : a; }
-int constexpr cmax(int a, int b) { return a > b ? a : b; }
+
 
 template <typename T, int M, int N>
 bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
@@ -77,8 +79,8 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
 
   // const int BLOCKSIZE = ((1 << 15) / (M * N * 8) < 2.1) ? 1024 : 512;
 
-  const int BLOCKSIZE =
-      cmin(1024, cmax(256, (2048 / (((3 << 14) / (M * N * 8))) / 32) * 32));
+  const int BLOCKSIZE = 256;
+  //      cmin(1024, cmax(256, (2048 / (((3 << 14) / (M * N * 8))) / 32) * 32));
 
   //  std::cout << BLOCKSIZE << "\n";
 
