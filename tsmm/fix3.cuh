@@ -19,22 +19,23 @@ static __global__ __launch_bounds__(BLOCKSIZE) void tsmm_fix3_kernel(
 
   for (int row = tidx; row < K; row += gridDim.x * blockDim.x) {
 
-    T avals[M];
-    for (int m = 0; m < M; m++) {
-      avals[m] = A[row * lda + m];
-    }
+    T sums[N];
+
     for (int n = 0; n < N; n++) {
+      sums[n] = 0;
+    }
 
-      T sums = 0;
-      for (int m = 0; m < M; m++) {
-        sums = axpy(sums, avals[m], bCache[m][n]);
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        sums[n] = axpy(sums[n], A[row*lda + m], bCache[m][n]);
       }
-
+    }
+    for( int n = 0; n < N; n++) {
       if (BETAISZERO) {
-        out[row * ldc + n] = scale(alpha, sums);
+        out[row * ldc + n] = scale(alpha, sums[n]);
       } else {
         out[row * ldc + n] =
-            axpby(sums, __ldg(out + row * ldc + n), alpha, beta);
+            axpby(sums[n], __ldg(out + row * ldc + n), alpha, beta);
       }
     }
   }
