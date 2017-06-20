@@ -24,7 +24,8 @@ static __global__ __launch_bounds__(BLOCKSIZE) void tsmm_fix3_kernel(
       avals[m] = A[row * lda + m];
     }
     for (int n = 0; n < N; n++) {
-      T sums;
+
+      T sums = 0;
       for (int m = 0; m < M; m++) {
         sums = axpy(sums, avals[m], bCache[m][n]);
       }
