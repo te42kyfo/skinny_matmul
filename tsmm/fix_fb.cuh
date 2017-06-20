@@ -34,8 +34,7 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     const int o1 = row * lda;
     const int o2 = (row + K / 2) * lda;
 
-//#pragma unroll(M % 2 == 0 ? 2 : 1)
-//#pragma unroll(2)
+
     for (int m = 0; m < M; m++) {
       T bV = bCache[m][n];
       sum1 = axpy(sum1, A[o1 + m], bV);
@@ -79,7 +78,7 @@ bool tsmm_fix_fb(const int blockCount, const int varM, const int varN,
 
   // const int BLOCKSIZE = ((1 << 15) / (M * N * 8) < 2.1) ? 1024 : 512;
 
-  const int BLOCKSIZE = 256;
+  const int BLOCKSIZE = (M*N > 1024) ? (M*N>55 ? 1024 : 512) : 256;
   //      cmin(1024, cmax(256, (2048 / (((3 << 14) / (M * N * 8))) / 32) * 32));
 
   //  std::cout << BLOCKSIZE << "\n";
