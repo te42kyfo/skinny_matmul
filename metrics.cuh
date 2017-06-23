@@ -15,6 +15,8 @@
 
 namespace {
 
+bool abortMeasureMetric;
+
 #define VERBOSE false
 
 #define DRIVER_API_CALL(apiFuncCall)                                       \
@@ -45,7 +47,6 @@ namespace {
       cuptiGetResultString(_status, &errstr);                              \
       fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n", \
               __FILE__, __LINE__, #call, errstr);                          \
-      exit(-1);                                                            \
     }                                                                      \
   } while (0)
 
@@ -78,6 +79,7 @@ void CUPTIAPI getMetricValueCallback(void *userdata,
                                      CUpti_CallbackDomain domain,
                                      CUpti_CallbackId cbid,
                                      const CUpti_CallbackData *cbInfo) {
+  if (abortMeasureMetric) return;
   MetricData_t *metricData = (MetricData_t *)userdata;
   unsigned int i, j, k;
 
@@ -153,9 +155,10 @@ void CUPTIAPI getMetricValueCallback(void *userdata,
         if (metricData->eventIdx >= metricData->numEvents) {
           fprintf(stderr,
                   "error: too many events collected, metric expects only %d "
-                  "instead fo %d\n",
+                  "instead of %d\n",
                   (int)metricData->numEvents, metricData->eventIdx);
-          exit(-1);
+          abortMeasureMetric = true;
+          return;
         }
 
         // sum collect event values from all instances
@@ -243,6 +246,8 @@ static void CUPTIAPI bufferCompleted(CUcontext ctx, uint32_t streamId,
 static CUcontext context = 0;
 
 double measureMetric(std::function<double()> runPass, const char *metricName) {
+  abortMeasureMetric = false;
+
   CUpti_SubscriberHandle subscriber;
 
   CUdevice device = 0;
@@ -328,14 +333,15 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
   }
 
   // use all the collected events to calculate the metric value
-  CUPTI_CALL(cuptiMetricGetValue(
-      device, metricId, metricData.numEvents * sizeof(CUpti_EventID),
-      metricData.eventIdArray, metricData.numEvents * sizeof(uint64_t),
-      metricData.eventValueArray, kernelDuration, &metricValue));
+  if (!abortMeasureMetric)
+    CUPTI_CALL(cuptiMetricGetValue(
+        device, metricId, metricData.numEvents * sizeof(CUpti_EventID),
+        metricData.eventIdArray, metricData.numEvents * sizeof(uint64_t),
+        metricData.eventValueArray, kernelDuration, &metricValue));
 
   double val = 0.0;
   // print metric value, we format based on the value kind
-  {
+  if(!abortMeasureMetric) {
     CUpti_MetricValueKind valueKind;
     size_t valueKindSize = sizeof(valueKind);
     CUPTI_CALL(cuptiMetricGetAttribute(metricId, CUPTI_METRIC_ATTR_VALUE_KIND,
