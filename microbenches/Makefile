@@ -9,3 +9,6 @@ membw: membw.cu Makefile
 
 instrs: instruction_rates.cu Makefile
 	nvcc $(NVCCFLAGS) $(INCLUDES) -o $@ $< ../sqlite3.o $(LDFLAGS)
+
+roofline: roofline.cu Makefile
+	nvcc $(NVCCFLAGS) $(INCLUDES) -o $@ $< ../sqlite3.o $(LDFLAGS)

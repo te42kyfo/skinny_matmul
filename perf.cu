@@ -204,10 +204,21 @@ int main(int argc, char** argv) {
 
             if (bestTime > 0) {
               if (tsmm_mode) {
-                bw = ((beta == 0 || self == 1 ? 1.0 : 2.0) * N + M) * K *
-                     sizeof(dtype) / bestTime / 1.0e9;
-                flops = (M + (beta == 0 ? 0 : 1)) * K * N * flopsPerCell /
-                        bestTime * 1.0e-9;
+                if (beta < 0.1) {
+                  flops = M * K * N * flopsPerCell / bestTime * 1.0e-9;
+                  bw = (M * K + N * K + M * N) * sizeof(dtype) / bestTime *
+                       1.0e-9;
+                } else {
+                  flops =
+                      (M * K * N + N * K) * flopsPerCell / bestTime * 1.0e-9;
+                  if (self == 1) {
+                    bw = (M * K + N * K + M * N) * sizeof(dtype) / bestTime *
+                         1.0e-9;
+                  } else {
+                    bw = (M * K + 2 * N * K + M * N) * sizeof(dtype) /
+                         bestTime * 1.0e-9;
+                  }
+                }
               }
 
               if (tsmttsm_mode) {
@@ -258,7 +269,7 @@ int main(int argc, char** argv) {
                  << "  " << setprecision(3) << setw(5)
                  << (DRAMreadBW + DRAMwriteBW - eccBW / 2)  //
                  << " " << setw(5) << L2readBW + L2writeBW  //
-                 << " " << setw(5) << eccBW << "  \n";
+                 << " " << setw(5) << sharedLoadBW << "  \n";
 
             cout.flush();
             db.insert({{"multype", "\"" + multype + "\""},

@@ -57,18 +57,14 @@ bool tsmm_fix2(const size_t blockCount, const int varM, const int varN,
 
   const int BLOCKSIZE = 256;
 
-  if (M >= 32 / sizeof(T)) {
-    T Tzero;
-    zero(Tzero);
-    if (eq(beta, Tzero)) {
-      tsmm_fix2_kernel<T, M, N, BLOCKSIZE, true><<<blockCount, BLOCKSIZE>>>(
-          A, B, C, K, lda, ldb, ldc, alpha, beta);
-    } else {
-      tsmm_fix2_kernel<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
-          A, B, C, K, lda, ldb, ldc, alpha, beta);
-    }
-    return true;
+  T Tzero;
+  zero(Tzero);
+  if (eq(beta, Tzero)) {
+    tsmm_fix2_kernel<T, M, N, BLOCKSIZE, true><<<blockCount, BLOCKSIZE>>>(
+        A, B, C, K, lda, ldb, ldc, alpha, beta);
+  } else {
+    tsmm_fix2_kernel<T, M, N, BLOCKSIZE, false><<<blockCount, BLOCKSIZE>>>(
+        A, B, C, K, lda, ldb, ldc, alpha, beta);
   }
-
-  return false;
+  return true;
 }
