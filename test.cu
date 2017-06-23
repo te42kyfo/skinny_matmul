@@ -6,6 +6,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "cu_complex.h"
@@ -224,7 +225,7 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  size_t maxMatrixSize = 0.1 * ((size_t)1 << 30) / (2 * sizeof(dtype));
+  size_t maxMatrixSize = 1 * ((size_t)1 << 30) / (2 * sizeof(dtype));
   totalA = maxMatrixSize;
 
 #ifdef TSMM
@@ -245,7 +246,7 @@ int main(int argc, char** argv) {
   default_random_engine gen(r());
   uniform_int_distribution<int> dis(0, 4);
 
-  int sampleSize = 1000;
+  int sampleSize = 20;
 
   for (int M = m1; M <= m2; M++) {
     for (int N = n1; N <= n2; N++) {
