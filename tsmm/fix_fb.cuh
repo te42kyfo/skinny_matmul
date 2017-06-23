@@ -50,7 +50,6 @@ static __global__ void __launch_bounds__(BLOCKSIZE)
     }
   }
 
-  
   // remainder loop
   for (row += K / 2; row < K; row += gridDim.x * BLOCKSIZE / N) {
     T sum;

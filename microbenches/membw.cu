@@ -313,5 +313,5 @@ int main(int argc, char** argv) {
   GPU_ERROR(cudaMalloc(&dA, 3 * sizeof(double) * sizeA));
   initKernel<<<52, 256>>>(dA, 3 * sizeA);
 
-  measureSeries<32>(dA, dA + sizeA, sizeA);
+  measureSeries<64>(dA, dA + sizeA, sizeA);
 }
