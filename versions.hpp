@@ -111,7 +111,10 @@ getEnabledTSMTTSMVersions() {
        "FGENV3T"});
 #endif
 #ifdef FIX_GENV32T
-  versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 2>, "FGENT32"});
+  versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 2>, "FGEN32T"});
+#endif
+#ifdef FIX_GENV33T
+  versions.push_back({GENV3X::tsmttsm<dtype, PARM, PARN, 3>, "FGEN33T"});
 #endif
 #ifdef FIX_GENV4
   versions.push_back({GENV4::tsmttsm<dtype, PARM, PARN>, "FGENV4"});

@@ -26,7 +26,10 @@ __global__ void deviceReduce(iT *blockResults, T *result, T alpha, T beta,
                              convert<iT, T>(scale2(renormalize(sum), alpha)));
 }
 
-template <typename T, typename iT, int M, int N, int BLOCKSIZE, bool TRANSPOSE>
+enum class MEMPATH { GLOBAL, TEX };
+
+template <typename T, typename iT, int M, int N, int BLOCKSIZE, bool TRANSPOSE,
+          MEMPATH BLOAD>
 __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
                                    const int lda, const int ldb,
                                    const int ldc) {
@@ -47,7 +50,12 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
 
   for (int idx = tidx / M; idx < K; idx += blockDim.x * gridDim.x / M) {
     for (int n = 0; n < N; n++) {
-      threadSum[n] = axpy2(threadSum[n], A[idx * lda + m], B[idx * ldb + n]);
+      if (BLOAD == MEMPATH::GLOBAL) {
+        threadSum[n] = axpy2(threadSum[n], A[idx * lda + m], B[idx * ldb + n]);
+      } else if (BLOAD == MEMPATH::TEX) {
+        threadSum[n] =
+            axpy2(threadSum[n], A[idx * lda + m], __ldg(B + idx * ldb + n));
+      }
     }
   }
 
@@ -73,7 +81,7 @@ __global__ void blockProductKernel(const T *A, const T *B, iT *out, const int K,
 
 void *d_temp_storage = NULL;
 
-template <typename T, typename iT, int M, int N>
+template <typename T, typename iT, int M, int N, MEMPATH BLOAD>
 bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
@@ -83,10 +91,12 @@ bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
   if (blockCount * M * N > 100 * 100 * 1000) return false;
 
   if (N > M) {
-    GENV3::blockProductKernel<T, iT, N, M, 256, true><<<blockCount, 256>>>(
+    GENV3::blockProductKernel<T, iT, N, M, 256, true,
+                              BLOAD><<<blockCount, 256>>>(
         B, A, (iT *)d_temp_storage, K, ldb, lda, ldc);
   } else {
-    GENV3::blockProductKernel<T, iT, M, N, 256, false><<<blockCount, 256>>>(
+    GENV3::blockProductKernel<T, iT, M, N, 256, false,
+                              BLOAD><<<blockCount, 256>>>(
         A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
   }
   GENV3::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(

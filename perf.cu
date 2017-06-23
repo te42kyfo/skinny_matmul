@@ -131,13 +131,11 @@ int main(int argc, char** argv) {
 
 #ifdef TSMM
   auto versions = getEnabledTSMMVersions();
-  MatmulFunctionType referenceFunction = tsmm_cublas<dtype>;
   totalB = 104 * 104;
   totalC = maxMatrixSize;
 #endif
 #ifdef TSMTTSM
   auto versions = getEnabledTSMTTSMVersions();
-  MatmulFunctionType referenceFunction = tsmttsm_cublas<dtype>;
   totalB = maxMatrixSize;
   totalC = 104 * 104;
 #endif
@@ -161,22 +159,24 @@ int main(int argc, char** argv) {
 #endif
 
       for (auto matmulVersion : versions) {
-        size_t K = 200;
+
+        size_t K = maxK/100 + 1;
         measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount * 4,
                       1, false, -1.0);
         double resultTime =
             measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
                           smCount * 4, 1, false, -1.0);
 
+
         while (resultTime > 0 && resultTime < 0.01 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
                                      ldc, smCount * 4, 1, false, -1.0);
         }
+
         for (int self = 0; self <= (M == N || tsmm_mode ? 1 : 0); self++) {
           if (self == 1 && tsmm_mode) ldc = max(M, N);
           for (htype beta = (tsmm_mode ? 0.0 : 1.0); beta <= 1.0; beta += 1.0) {
-            int iters = 1;
 
             double bestTime = -1;
             int bestBlockCount = 0;
@@ -187,7 +187,7 @@ int main(int argc, char** argv) {
               for (int t = 0; t < sampleSize; t++) {
                 times[t] =
                     measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
-                                  blockCount, iters, (self == 1), beta);
+                                  blockCount, 1, (self == 1), beta);
               }
               times.erase(remove_if(begin(times), end(times),
                                     [](double time) { return time < 0; }),
