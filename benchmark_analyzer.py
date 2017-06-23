@@ -3,20 +3,32 @@
 import sqlite3
 import numpy as np
 import matplotlib
-matplotlib.use('agg')
+# matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import functools as fnc
+import glob
 
-conn = sqlite3.connect('benchmarks.db')
-conn.row_factory = sqlite3.Row
+files = glob.glob('./*.db')
+
+conns = []
+for file in files:
+    conns.append(sqlite3.connect(file))
+    conns[-1].row_factory = sqlite3.Row
+
+# conn = sqlite3.connect('benchmarks.db')
+# conn.row_factory = sqlite3.Row
+
+pathPrefix = "../plots/"
 
 arithIntensity = np.zeros((100, 100))
+
 for m in range(1,100):
     for n in range(1,100):
         arithIntensity[m, n] = 2*m*n/(m+n)
 
 
 def makeGrid(res, axis1, axis2, value, max1=-1, max2=-1):
+
     if max1 < 0:
         max1 = fnc.reduce(max, map( lambda row: row[axis1], res))
     if max2 < 0:
@@ -26,23 +38,36 @@ def makeGrid(res, axis1, axis2, value, max1=-1, max2=-1):
     for row in res:
         if row[axis1] <= max1 and row[axis2] <= max2:
             grid[row[axis1]][row[axis2]] = row[value]
-            if row['time'] < 0.0001 or not np.isfinite(row[value]):
+            if row[value]is None:
+                grid[row[axis1]][row[axis2]] = 0
+            if row['time'] < 0.0001 or not np.isfinite(grid[row[axis1]][row[axis2]]):
                 grid[row[axis1]][row[axis2]] = 0
     return grid
 
 def fetchGrid(multype, device, types, name, inplace, zerobeta, value):
-    cursor = conn.execute("SELECT * FROM benchmarks WHERE multype=? AND device=? and TYPES=?"
-                          "AND name=? AND inplace=? AND zerobeta=?",
-                          (multype, device, types, name, inplace, zerobeta))
-    res = cursor.fetchall()
+    for conn in conns:
+        cursor = conn.execute('SELECT * FROM benchmarks WHERE multype=? AND device=? and TYPES=?'
+                              'AND name=? AND inplace=? AND zerobeta=? AND branch="master"',
+                              (multype, device, types, name, inplace, zerobeta))
+        res = cursor.fetchall()
+
+        if len(res) != 0:
+            break
+
     if len(res) == 0:
-        print("No Results for " + multype + " " + device + " " + name + " " + str(inplace) + " " + str(zerobeta))
+        print("No Results for " + multype + " " + device + " " + name + " " +
+              str(inplace) + " " + str(zerobeta))
         return np.zeros((0,0))
+    print("% " + str(len(res)) + " results" )
     return makeGrid(res, "N", "M", value)
 
 def fetchGridWhere(whereClause):
-    cursor = conn.execute("SELECT * FROM benchmarks WHERE " + whereClause)
-    res = cursor.fetchall()
+    for conn in conns:
+        cursor = conn.execute("SELECT * FROM benchmarks WHERE " + whereClause)
+        res = cursor.fetchall()
+
+        if len(res) != 0:
+            break
     if len(res) == 0:
         print("No Results for " + whereClause)
         return np.zeros((0,0))
@@ -60,18 +85,25 @@ def rooflinePlot(multype, device, types, name, inplace, zerobeta, streamBW, peak
                          vmin=0,
                          vmax=1,
                          cmap=plt.get_cmap('jet'))
-    plt.suptitle(device + ", " + name + ", " + types + ", % of roofline performance",size=22)
+#    plt.suptitle(device + ", " + name + ", " + types + ", efficiency",size=22)
     plt.xlabel("M")
     plt.ylabel("N")
     plt.xlim(0.5, plt.xlim()[1])
     plt.ylim(0.5, plt.ylim()[1])
     plt.colorbar()
+    plt.xticks([1] + list(range(1,flopgrid.shape[0]+1))[7::8])
+    plt.yticks([1] + list(range(1,flopgrid.shape[1]+1))[7::8])
+
+    plt.grid(linestyle="-", alpha=0.1, color="black")
     #plt.axes().set_aspect('auto')
 #    fig.tight_layout()
-    plt.savefig("roofline_" + device.replace(" ", "_") + "_" + types + "_" + name +".png", transparent=True)
-    plt.show()
-    plt.close()
 
+    path = pathPrefix + "roofline_" + device.replace(" ", "_") + "_" + types + "_" + name +".pdf"
+
+    plt.savefig(path, transparent=True, bbox_inches="tight")
+    desc = "Roofline normalized efficiency, " + device + ", types " + types + ", version " + name.replace("_", "-")
+#    plt.show()
+    return [path, desc]
 
 def absolutePlot(multype, device, types, name, inplace, zerobeta, value):
     grid = fetchGrid(multype, device, types, name, inplace, zerobeta, value)
@@ -80,19 +112,55 @@ def absolutePlot(multype, device, types, name, inplace, zerobeta, value):
                          interpolation='nearest',
                          origin='lower',
                          cmap=plt.get_cmap('jet'))
-    plt.suptitle(device + ", " + name + ", " + types + ", " + value,size=22)
+#    plt.suptitle(device + ", " + name + ", " + types + ", " + value,size=22)
     plt.xlabel("M")
     plt.ylabel("N")
     plt.xlim(0.5, plt.xlim()[1])
     plt.ylim(0.5, plt.ylim()[1])
     plt.colorbar()
-    #plt.axes().set_aspect('auto')
-    #fig.tight_layout()
-    name = value + "_" + device.replace(" ", "_") + "_" + types + "_" + name +".png"
-    plt.savefig(name, transparent=True, bbox_inchsasdes="tight")
-    return name
+    plt.xticks([1] + list(range(1,grid.shape[0]+1))[7::8])
+    plt.yticks([1] + list(range(1,grid.shape[1]+1))[7::8])
+    plt.grid(linestyle="-", alpha=0.1, color="black")
+    path = pathPrefix + value + "_" + device.replace(" ", "_") + "_" + types + "_" + name +".pdf"
+    desc = value + " on " + device + ", types " + types + " of version " + name.replace("_", "-")
 
-def speedupPlot(grid1, grid2, max1 = -1, max2 = -2):
+    plt.savefig(path, transparent=True, bbox_inches="tight")
+#    plt.show()
+    plt.close(fig)
+
+    return [path, desc]
+
+def speedupOver(commonKeys, discriminator, value1, value2, max1=-1, max2=-1):
+    whereClause = ""
+    filename = pathPrefix + "speedup_"
+    desc = "Speedup of " + value1.replace("_", "-") + " over " + value2.replace("_", "-")
+
+    typeKey = {"DR" : "double precision", "FR" : "single precision", "DC" : "double precision complex", "FC" : "single precision complex"}
+
+    desc += " ("
+    for key in commonKeys:
+        whereClause += key[0] + "=\"" + key[1] + "\" AND "
+        filename += key[1].replace(" ", "_") + "_"
+        if key[0] == "device":
+            if desc[-1] != "(":
+                desc += ", "
+            desc += key[1]
+        if key[0] == "types":
+            if desc[-1] != "(":
+                desc += ", "
+            desc += typeKey[key[1]]
+    desc += ")"
+
+
+    filename += value1 + "_vs_" + value2 + ".pdf"
+
+    grid1 = fetchGridWhere(whereClause + discriminator + "=\"" + value1 + "\"")
+    grid2 = fetchGridWhere(whereClause + discriminator + "=\"" + value2 + "\"")
+
+    speedupPlot(grid1, grid2, max1, max2, filename=filename)
+    return [filename, desc]
+
+def speedupPlot(grid1, grid2, max1 = -1, max2 = -1, filename="speedup.pdf"):
     if(max1 > 0 and max2 > 0):
         grid1 = grid1[0:max1,0:max2];
         grid2 = grid2[0:max1,0:max2];
@@ -106,7 +174,6 @@ def speedupPlot(grid1, grid2, max1 = -1, max2 = -2):
     diff = np.log2(diff)
 
     spread = max(abs(np.max(diff)), abs(np.min(diff)))
-    print(spread)
 
     fig=plt.figure()
     imgplot = plt.imshow(diff,
@@ -118,10 +185,11 @@ def speedupPlot(grid1, grid2, max1 = -1, max2 = -2):
     plt.xlim(0.5, plt.xlim()[1])
     plt.ylim(0.5, plt.ylim()[1])
     plt.colorbar()
-    #plt.axes().set_aspect('auto')
-    plt.savefig("speedup_.png")
-    #fig.tight_layout()
-    plt.show()
+    plt.xlabel("M")
+    plt.ylabel("N")
+
+    plt.savefig(filename, transparent=True, bbox_inches="tight")
+    return filename
 
 def bestPlot(grids):
 
@@ -171,16 +239,16 @@ def bestPlot(grids):
     plt.grid(True)
     #plt.axes().set_aspect('auto')
     #fig.tight_layout()
-    plt.show()
+#    plt.show()
 
 
 
 
 def analyseGENV3X():
-    cursor = conn.execute("SELECT * FROM benchmarks WHERE multype=? AND device=? and TYPES=?"
-                          "AND name=? AND inplace=? AND zerobeta=? AND time > 0 "
-                          "AND usr1_name=?",
-                          ("TSMTTSM",  "Tesla K20m", "DR", "GENV3X", 0, 0, "threads_per_n"))
+    cursor = conn[0].execute("SELECT * FROM benchmarks WHERE multype=? AND device=? and TYPES=?"
+                             "AND name=? AND inplace=? AND zerobeta=? AND time > 0 "
+                             "AND usr1_name=?",
+                             ("TSMTTSM",  "Tesla K20m", "DR", "GENV3X", 0, 0, "threads_per_n"))
     res = cursor.fetchall()
 
     n_per_thread = []
@@ -197,8 +265,31 @@ def analyseGENV3X():
 
         grids = []
         for i in range(0, 16):
-            grids.append( fetchGridWhere("multype=\"TSMTTSM\" AND device=\"Tesla K20m\" and TYPES=\"DR\" AND name=\"GENV3X\" AND inplace=0 AND zerobeta=0 AND usr1_name=\"threads_per_n\" AND usr1_val=\"" + str(i) + "\""))
+            grids.append( fetchGridWhere("multype=\"TSMTTSM\" AND device=\"Tesla K20m\" and TYPES=\"DR\" AND name=\"GENV3X\" AND inplace=0 AND zerobeta=0 AND usr1_name=\"threads_per_n\" AND usr1_val=\"" + str(i) + "\" AND branch=\"master\""))
 
         bestPlot(grids)
 
 
+def fetchLineWhere(whereClause, value):
+    for conn in conns:
+        cursor = conn.execute("SELECT * FROM benchmarks WHERE " + whereClause)
+        res = cursor.fetchall()
+
+        if len(res) != 0:
+            break
+    if len(res) == 0:
+        print("No Results for " + whereClause)
+        return np.zeros((0))
+
+    maxVal = fnc.reduce(max, map( lambda row: row["M"], res))
+
+    line = np.zeros((maxVal+1))
+    
+    for row in res:
+        if row["M"] <= maxVal:
+            line[row["M"]] = row[value]
+            if row[value] is None:
+                line[row["M"]] = 0
+            if row['time'] < 0.0001 or not np.isfinite(line[row["M"]]):
+                line[row["M"]] = 0
+    return line

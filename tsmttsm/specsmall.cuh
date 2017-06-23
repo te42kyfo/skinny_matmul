@@ -119,8 +119,8 @@ bool tsmttsm(const int blockCount, const int varM, const int varN, const int K,
           A, B, (iT *)d_temp_storage, K, lda, ldb, ldc);
     }
   }
-  SPECSMALL::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
-      (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
+  //  SPECSMALL::deviceReduce<T, iT, M, N><<<M * N / 256 + 1, 256>>>(
+  //    (iT *)d_temp_storage, C, alpha, beta, blockCount, lda, ldb, ldc);
   return true;
 }
 }

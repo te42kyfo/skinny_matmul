@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
                           smCount * 4, 1, false, -1.0);
 
 
-        while (resultTime > 0 && resultTime < 0.02 && K < maxK) {
+        while (resultTime > 0 && resultTime < 0.005 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
                                      ldc, smCount * 4, 1, false, -1.0);
@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
             int bestBlockCount = 0;
             for (int blockCount = 1 * smCount; blockCount <= 8 * smCount;
                  blockCount += smCount) {
-              int sampleSize = 5;
+              int sampleSize = 3;
               vector<double> times(sampleSize);
               for (int t = 0; t < sampleSize; t++) {
                 times[t] = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
@@ -237,29 +237,36 @@ int main(int argc, char** argv) {
             if (bestTime < 0) continue;
 
             double eccBW = 0, DRAMreadBW = 0, DRAMwriteBW = 0, L2readBW = 0,
-                   L2writeBW = 0, sharedLoadBW = 0, occupancy = 0;
+                   L2writeBW = 0, sharedLoadBW = 0, occupancy = 0,
+                   shmemReplays = 0;
+            if (matmulVersion.second != "CUBLAS") {
+              DRAMreadBW =
+                  measureMetric(measureMatmulFunc, "dram_read_throughput") /
+                  1.e9;
 
-            DRAMreadBW =
-                measureMetric(measureMatmulFunc, "dram_read_throughput") / 1.e9;
+              DRAMwriteBW =
+                  measureMetric(measureMatmulFunc, "dram_write_throughput") /
+                  1.e9;
 
-            DRAMwriteBW =
-                measureMetric(measureMatmulFunc, "dram_write_throughput") /
-                1.e9;
+              L2readBW =
+                  measureMetric(measureMatmulFunc, "l2_read_throughput") / 1.e9;
 
-            L2readBW =
-                measureMetric(measureMatmulFunc, "l2_read_throughput") / 1.e9;
+              L2writeBW =
+                  measureMetric(measureMatmulFunc, "l2_write_throughput") /
+                  1.e9;
 
-            L2writeBW =
-                measureMetric(measureMatmulFunc, "l2_write_throughput") / 1.e9;
+              sharedLoadBW =
+                  measureMetric(measureMatmulFunc, "shared_load_throughput") /
+                  1.e9;
 
-            sharedLoadBW =
-                measureMetric(measureMatmulFunc, "shared_load_throughput") /
-                1.e9;
+              shmemReplays =
+                  measureMetric(measureMatmulFunc, "shared_efficiency");
 
-            occupancy = measureMetric(measureMatmulFunc, "achieved_occupancy");
+              occupancy =
+                  measureMetric(measureMatmulFunc, "achieved_occupancy");
 
-            eccBW = measureMetric(measureMatmulFunc, "ecc_throughput") / 1.e9;
-
+              eccBW = measureMetric(measureMatmulFunc, "ecc_throughput") / 1.e9;
+            }
             cout << multype << " " << deviceName << " " << setw(3) << M << " "
                  << setw(3) << N << " " << setw(2) << beta << "    "
                  << (self == 1 ? "A*A" : "A*B") << "  " << setw(8)
@@ -272,7 +279,8 @@ int main(int argc, char** argv) {
                  << "  " << setprecision(3) << setw(5)
                  << (DRAMreadBW + DRAMwriteBW - eccBW / 2)  //
                  << " " << setw(5) << L2readBW + L2writeBW  //
-                 << " " << setw(5) << sharedLoadBW << "  \n";
+                 << " " << setw(5) << sharedLoadBW          //
+                 << " " << setw(5) << shmemReplays << "  \n";
 
             cout.flush();
             db.insert({{"multype", "\"" + multype + "\""},

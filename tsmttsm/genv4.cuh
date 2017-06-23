@@ -78,15 +78,22 @@ __global__ void blockProductKernel(const T *A, const T *B, T *out, int K,
 }
 
 void *d_temp_storage = NULL;
+size_t temp_storage_size = 0;
 
 template <typename T, int M, int N, MEMPATH mempath>
 bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
              const T *A, const int lda, const T alpha, const T *B,
              const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N) return false;
-  if (d_temp_storage == NULL)
-    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(dtype) * 100 * 100 * 1000));
-  if (blockCount * M * N > 100 * 100 * 1000) return false;
+
+  size_t required_temp_storage_size = M * N * blockCount;
+  if (temp_storage_size < required_temp_storage_size) {
+    std::cout << "GENV4: Reallocate. Was " << temp_storage_size;
+    GPU_ERROR(cudaFree(d_temp_storage));
+    temp_storage_size = 3 * required_temp_storage_size;
+    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(T) * temp_storage_size));
+    std::cout << " is now " << temp_storage_size << "\n";
+  }
 
   if (M * N > blockCount * 256) {
     blockCount = M * N / 256 + 1;

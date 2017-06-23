@@ -40,7 +40,7 @@ __global__ void __launch_bounds__(BLOCKSIZE)
   if (aOffset >= rowsPerBlock * lda) aOffset = 0;
 
   __shared__ iT
-      blockStorage[(rowsPerBlock + 1) * M * (sizeof(T) > sizeof(iT) ? 2 : 1)];
+      blockStorage[rowsPerBlock * M * (sizeof(T) > sizeof(iT) ? 2 : 1)];
   T *rowCache = reinterpret_cast<T *>(blockStorage);
 
   zero(blockStorage[threadIdx.x]);
@@ -111,6 +111,7 @@ __global__ void __launch_bounds__(BLOCKSIZE)
 }
 
 void *d_temp_storage = NULL;
+size_t temp_storage_size = 0;
 
 template <typename T, typename iT, int M, int N>
 bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
@@ -118,9 +119,14 @@ bool tsmttsm(int blockCount, const int varM, const int varN, const int K,
              const int ldb, const T beta, T *C, const int ldc) {
   if (varM != M || varN != N) return false;
 
-  if (d_temp_storage == NULL)
-    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(iT) * 100 * 100 * 1000));
-  if (blockCount * M * N > 100 * 100 * 1000) return false;
+  size_t required_temp_storage_size = M * N * blockCount;
+  if (temp_storage_size < required_temp_storage_size) {
+    std::cout << "GENV4: Reallocate. Was " << temp_storage_size;
+    GPU_ERROR(cudaFree(d_temp_storage));
+    temp_storage_size = 3 * required_temp_storage_size;
+    GPU_ERROR(cudaMalloc(&d_temp_storage, sizeof(iT) * temp_storage_size));
+    std::cout << " is now " << temp_storage_size << "\n";
+  }
 
   if (N > M) {
     int const blocksize = (256 / N) * N;
