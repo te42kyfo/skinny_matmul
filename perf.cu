@@ -95,7 +95,23 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
     return time;
 }
 
+#define DRIVER_API_CALL(apiFuncCall)                                       \
+  do {                                                                     \
+    CUresult _status = apiFuncCall;                                        \
+    if (_status != CUDA_SUCCESS) {                                         \
+      fprintf(stderr, "%s:%d: error: function %s failed with error %d.\n", \
+              __FILE__, __LINE__, #apiFuncCall, _status);                  \
+      exit(-1);                                                            \
+    }                                                                      \
+  } while (0)
+
 int main(int argc, char** argv) {
+  CUcontext context = 0;
+  CUdevice device = 0;
+  cuInit(0);
+  DRIVER_API_CALL(cuDeviceGet(&device, 0));
+  DRIVER_API_CALL(cuCtxCreate(&context, 0, device));
+
   BenchDB db("benchmarks.db");
 
   cudaDeviceProp prop;
@@ -163,14 +179,12 @@ int main(int argc, char** argv) {
 #endif
 
       for (auto matmulVersion : versions) {
-
-        size_t K = maxK/100 + 1;
+        size_t K = maxK / 100 + 1;
         measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount * 4,
                       1, false, -1.0);
         double resultTime =
             measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
                           smCount * 4, 1, false, -1.0);
-
 
         while (resultTime > 0 && resultTime < 0.005 && K < maxK) {
           K = min(maxK, 2 * K);
@@ -240,32 +254,35 @@ int main(int argc, char** argv) {
                    L2writeBW = 0, sharedLoadBW = 0, occupancy = 0,
                    shmemReplays = 0;
             if (matmulVersion.second != "CUBLAS") {
-              DRAMreadBW =
-                  measureMetric(measureMatmulFunc, "dram_read_throughput") /
+              DRAMreadBW = measureMetric(context, measureMatmulFunc,
+                                         "dram_read_throughput") /
+                           1.e9;
+
+              DRAMwriteBW = measureMetric(context, measureMatmulFunc,
+                                          "dram_write_throughput") /
+                            1.e9;
+
+              L2readBW = measureMetric(context, measureMatmulFunc,
+                                       "l2_read_throughput") /
+                         1.e9;
+
+              L2writeBW = measureMetric(context, measureMatmulFunc,
+                                        "l2_write_throughput") /
+                          1.e9;
+
+              sharedLoadBW = measureMetric(context, measureMatmulFunc,
+                                           "shared_load_throughput") /
+                             1.e9;
+
+              shmemReplays = measureMetric(context, measureMatmulFunc,
+                                           "shared_efficiency");
+
+              occupancy = measureMetric(context, measureMatmulFunc,
+                                        "achieved_occupancy");
+
+              eccBW =
+                  measureMetric(context, measureMatmulFunc, "ecc_throughput") /
                   1.e9;
-
-              DRAMwriteBW =
-                  measureMetric(measureMatmulFunc, "dram_write_throughput") /
-                  1.e9;
-
-              L2readBW =
-                  measureMetric(measureMatmulFunc, "l2_read_throughput") / 1.e9;
-
-              L2writeBW =
-                  measureMetric(measureMatmulFunc, "l2_write_throughput") /
-                  1.e9;
-
-              sharedLoadBW =
-                  measureMetric(measureMatmulFunc, "shared_load_throughput") /
-                  1.e9;
-
-              shmemReplays =
-                  measureMetric(measureMatmulFunc, "shared_efficiency");
-
-              occupancy =
-                  measureMetric(measureMatmulFunc, "achieved_occupancy");
-
-              eccBW = measureMetric(measureMatmulFunc, "ecc_throughput") / 1.e9;
             }
             cout << multype << " " << deviceName << " " << setw(3) << M << " "
                  << setw(3) << N << " " << setw(2) << beta << "    "

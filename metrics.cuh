@@ -243,44 +243,24 @@ static void CUPTIAPI bufferCompleted(CUcontext ctx, uint32_t streamId,
   free(buffer);
 }
 
-static CUcontext context = 0;
 
-double measureMetric(std::function<double()> runPass, const char *metricName) {
+double measureMetric(CUcontext context, std::function<double()> runPass,
+                     const char *metricName) {
+
   abortMeasureMetric = false;
 
   CUpti_SubscriberHandle subscriber;
-
   CUdevice device = 0;
-  int computeCapabilityMajor = 0;
-  int computeCapabilityMinor = 0;
-  int deviceNum;
-  int deviceCount;
-  char deviceName[32];
+  DRIVER_API_CALL(cuDeviceGet(&device, 0));
+
   CUpti_MetricID metricId;
   CUpti_EventGroupSets *passData;
   MetricData_t metricData;
   unsigned int pass;
   CUpti_MetricValue metricValue;
 
-  if (context == 0) {
-    DRIVER_API_CALL(cuInit(0));
-    DRIVER_API_CALL(cuDeviceGetCount(&deviceCount));
-    if (deviceCount == 0) {
-      std::printf("There is no device supporting CUDA.\n");
-      return -2;
-    }
-
-    deviceNum = 0;
-    if (VERBOSE) std::printf("CUDA Device Number: %d\n", deviceNum);
-
-    DRIVER_API_CALL(cuDeviceGet(&device, deviceNum));
-    DRIVER_API_CALL(cuDeviceGetName(deviceName, 32, device));
-    if (VERBOSE) printf("CUDA Device Name: %s\n", deviceName);
-
-    DRIVER_API_CALL(cuDeviceComputeCapability(&computeCapabilityMajor,
-                                              &computeCapabilityMinor, device));
-    DRIVER_API_CALL(cuCtxCreate(&context, 0, device));
-  }
+  CUptiResult res = cuptiMetricGetIdFromName(device, metricName, &metricId);
+  if( res != CUPTI_SUCCESS) return 0.0;
 
   // runPass();
   cudaDeviceSynchronize();
@@ -307,7 +287,8 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
                                  CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020));
 
   // allocate space to hold all the events needed for the metric
-  CUPTI_CALL(cuptiMetricGetIdFromName(device, metricName, &metricId));
+  cuptiMetricGetIdFromName(device, metricName, &metricId);
+
   CUPTI_CALL(cuptiMetricGetNumEvents(metricId, &metricData.numEvents));
   metricData.device = device;
   metricData.eventIdArray =
@@ -341,7 +322,7 @@ double measureMetric(std::function<double()> runPass, const char *metricName) {
 
   double val = 0.0;
   // print metric value, we format based on the value kind
-  if(!abortMeasureMetric) {
+  if (!abortMeasureMetric) {
     CUpti_MetricValueKind valueKind;
     size_t valueKindSize = sizeof(valueKind);
     CUPTI_CALL(cuptiMetricGetAttribute(metricId, CUPTI_METRIC_ATTR_VALUE_KIND,
