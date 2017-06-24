@@ -25,7 +25,7 @@
 #endif
 // #include "tsmttsm/reduceonly.cuh"
 #include "tsmttsm/gen_cublas.cuh"
-#ifdef FIX_GENV1
+#if defined(FIX_GENV1) || defined(FIX_GENV1T)
 #include "tsmttsm/genv1.cuh"
 #endif
 #include "tsmttsm/genv3.cuh"
@@ -112,7 +112,7 @@ getEnabledTSMTTSMVersions() {
   versions.push_back(
       {GENV1::tsmttsm<dtype, PARM, PARN, GENV1::MEMPATH::GLOBAL>, "FGENV1"});
 #endif
-#ifdef FIX_GENV1T
+#ifdef FIX_GENV1T 
   versions.push_back(
       {GENV1::tsmttsm<dtype, PARM, PARN, GENV1::MEMPATH::TEX>, "FGENV1T"});
 #endif
