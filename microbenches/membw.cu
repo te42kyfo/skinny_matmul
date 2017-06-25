@@ -286,13 +286,12 @@ void measureAll(double* dA, double* dC, size_t sizeA) {
   measureLess((void*)(fatRakeKernel<N>), N, "fatRake", dA, dC, sizeA);
   measureLess((void*)(fatRakeLDGKernel<N>), N, "fatRakeLDG", dA, dC, sizeA);
 
-  // measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
-  // measureMore((void*)(scaleKernel<N>), N, "scale", dA, dC, sizeA);
-  // measureMore((void*)(updateKernel<N>), N, "update", dA, dC, sizeA);
-  // measureMore((void*)(triadKernel<N>), N, "triad", dA, dC, sizeA);
-  // measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
-  //  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC,
-  //  sizeA);
+  measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
+  measureMore((void*)(scaleKernel<N>), N, "scale", dA, dC, sizeA);
+  measureMore((void*)(updateKernel<N>), N, "update", dA, dC, sizeA);
+  measureMore((void*)(triadKernel<N>), N, "triad", dA, dC, sizeA);
+  measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
+  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC, sizeA);
   cout << "\n";
 }
 
@@ -305,6 +304,7 @@ template <>
 void measureSeries<0>(double* dA, double* dC, size_t sizeA) {}
 
 int main(int argc, char** argv) {
+  measureMetricInit();
   BenchDB db("../benchmarks.db");
   dbptr = &db;
 
@@ -313,5 +313,5 @@ int main(int argc, char** argv) {
   GPU_ERROR(cudaMalloc(&dA, 3 * sizeof(double) * sizeA));
   initKernel<<<52, 256>>>(dA, 3 * sizeA);
 
-  measureSeries<64>(dA, dA + sizeA, sizeA);
+  measureSeries<1>(dA, dA + sizeA, sizeA);
 }

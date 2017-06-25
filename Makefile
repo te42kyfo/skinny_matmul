@@ -2,7 +2,7 @@ NVCC := nvcc
 
 CUDA_HOME ?=  $(CUDATOOLKIT_HOME)
 
-NVCCFLAGS   := -std=c++11 -O3 -arch=sm_35 --compiler-options="-O2 -pipe -Wall -fopenmp -g " -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable" -Xcompiler \"-Wl,-rpath,$(CUDA_HOME)/extras/CUPTI/lib64/\" #  -Xptxas="-v"
+NVCCFLAGS   := -std=c++11 -O3 -arch=sm_60 --compiler-options="-O2 -pipe -Wall -fopenmp -fno-exceptions" -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable" -Xcompiler \"-Wl,-rpath,$(CUDA_HOME)/extras/CUPTI/lib64/\" #  -Xptxas="-v"
 
 
 CCFLAGS     :=

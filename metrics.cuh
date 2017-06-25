@@ -243,10 +243,18 @@ static void CUPTIAPI bufferCompleted(CUcontext ctx, uint32_t streamId,
   free(buffer);
 }
 
+static CUcontext context = 0;
 
-double measureMetric(CUcontext context, std::function<double()> runPass,
-                     const char *metricName) {
+void measureMetricInit() {
+  if (context == 0) {
+    CUdevice device = 0;
+    cuInit(0);
+    DRIVER_API_CALL(cuDeviceGet(&device, 0));
+    DRIVER_API_CALL(cuCtxCreate(&context, 0, device));
+  }
+}
 
+double measureMetric(std::function<double()> runPass, const char *metricName) {
   abortMeasureMetric = false;
 
   CUpti_SubscriberHandle subscriber;
@@ -260,7 +268,7 @@ double measureMetric(CUcontext context, std::function<double()> runPass,
   CUpti_MetricValue metricValue;
 
   CUptiResult res = cuptiMetricGetIdFromName(device, metricName, &metricId);
-  if( res != CUPTI_SUCCESS) return 0.0;
+  if (res != CUPTI_SUCCESS) return 0.0;
 
   // runPass();
   cudaDeviceSynchronize();
