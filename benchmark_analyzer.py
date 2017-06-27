@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import functools as fnc
 import glob
+import matplotlib.ticker as ticker
 
 files = glob.glob('./*.db')
 
@@ -184,7 +185,18 @@ def speedupPlot(grid1, grid2, max1 = -1, max2 = -1, filename="speedup.pdf"):
 
     plt.xlim(0.5, plt.xlim()[1])
     plt.ylim(0.5, plt.ylim()[1])
-    plt.colorbar()
+
+
+    def fmt(x, pos):
+        if x == 0:
+            return "    = "
+        val = np.power(2, x)
+        if x < 0:
+            val =  np.power(2, -x)
+        return "{:5.1f}".format(round(val,1)) + r"$\times$"
+
+
+    plt.colorbar(format=ticker.FuncFormatter(fmt))
     plt.xlabel("M")
     plt.ylabel("N")
 
