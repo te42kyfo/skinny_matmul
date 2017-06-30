@@ -9,16 +9,16 @@ using namespace std;
 
 BenchDB* dbptr;
 
-__global__ void initKernel(double* A, size_t N) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void initKernel(double* A, int N) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < N; idx += blockDim.x * gridDim.x) {
     A[idx] = 3.0;
   }
 }
 
 template <int N>
-__global__ void copyKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void copyKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < K / 2 / 4; idx += gridDim.x * blockDim.x) {
     A[idx] = __ldg(C + idx);
     A[idx + K / 4] = __ldg(C + K / 4 + idx);
@@ -28,25 +28,25 @@ __global__ void copyKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void scaleKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void scaleKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < K / 2; idx += gridDim.x * blockDim.x) {
     A[idx] = C[idx] * 1.2;
   }
 }
 
 template <int N>
-__global__ void updateKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void updateKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < K / 2; idx += gridDim.x * blockDim.x) {
     A[idx] = A[idx] * 1.2;
   }
 }
 
 template <int N>
-__global__ void triadKernel(double* A, double* C, size_t K) {
+__global__ void triadKernel(double* A, double* C, int K) {
   double* B = C + K;
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < K / 3 / 2; idx += gridDim.x * blockDim.x) {
     A[idx] = B[idx] * 1.2 + C[idx];
     A[idx + K / 2] = B[idx + K / 2] * 1.2 + C[idx + K / 2];
@@ -54,8 +54,8 @@ __global__ void triadKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void reduceKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void reduceKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   double sum = 0.0;
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
     sum += A[idx];
@@ -64,8 +64,8 @@ __global__ void reduceKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void reduceKernelUnroll(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void reduceKernelUnroll(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   double sum = 0.0;
   for (int idx = tidx; idx < K / 2; idx += gridDim.x * blockDim.x) {
     sum += A[idx];
@@ -75,8 +75,8 @@ __global__ void reduceKernelUnroll(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void rakeStoreKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void rakeStoreKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
     for (int n = 0; n < N; n++) {
       A[idx * N + n] = 1.2;
@@ -85,8 +85,8 @@ __global__ void rakeStoreKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void rakeScaleKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void rakeScaleKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
 #pragma unroll(1)
@@ -97,8 +97,8 @@ __global__ void rakeScaleKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void rakeKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void rakeKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   double sum = 0;
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
@@ -111,8 +111,8 @@ __global__ void rakeKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void rakeLDGKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void rakeLDGKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   double sum = 0;
   for (int idx = tidx; idx < K; idx += gridDim.x * blockDim.x) {
@@ -125,8 +125,8 @@ __global__ void rakeLDGKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void fatRakeKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void fatRakeKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   double sum = 0;
   for (int idx = tidx / N; idx < K; idx += gridDim.x * blockDim.x / N) {
@@ -139,8 +139,8 @@ __global__ void fatRakeKernel(double* A, double* C, size_t K) {
 }
 
 template <int N>
-__global__ void fatRakeLDGKernel(double* A, double* C, size_t K) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+__global__ void fatRakeLDGKernel(double* A, double* C, int K) {
+  int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
   double sum = 0;
   for (int idx = tidx / N; idx < K; idx += gridDim.x * blockDim.x / N) {
@@ -152,7 +152,7 @@ __global__ void fatRakeLDGKernel(double* A, double* C, size_t K) {
   if (tidx == 0) C[tidx] = sum;
 }
 
-double callKernel(void* func, double* dA, double* dC, size_t sizeA, int bC,
+double callKernel(void* func, double* dA, double* dC, int sizeA, int bC,
                   int bS) {
   cudaConfigureCall(bC, bS);
   cudaSetupArgument(dA, 0);
@@ -286,12 +286,13 @@ void measureAll(double* dA, double* dC, size_t sizeA) {
   measureLess((void*)(fatRakeKernel<N>), N, "fatRake", dA, dC, sizeA);
   measureLess((void*)(fatRakeLDGKernel<N>), N, "fatRakeLDG", dA, dC, sizeA);
 
-  measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
+  /*  measureMore((void*)(copyKernel<N>), N, "copy", dA, dC, sizeA);
   measureMore((void*)(scaleKernel<N>), N, "scale", dA, dC, sizeA);
   measureMore((void*)(updateKernel<N>), N, "update", dA, dC, sizeA);
   measureMore((void*)(triadKernel<N>), N, "triad", dA, dC, sizeA);
   measureMore((void*)(reduceKernel<N>), N, "reduce", dA, dC, sizeA);
-  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC, sizeA);
+  measureMore((void*)(reduceKernelUnroll<N>), N, "reduceUnroll", dA, dC,
+  sizeA);*/
   cout << "\n";
 }
 
@@ -313,5 +314,5 @@ int main(int argc, char** argv) {
   GPU_ERROR(cudaMalloc(&dA, 3 * sizeof(double) * sizeA));
   initKernel<<<52, 256>>>(dA, 3 * sizeA);
 
-  measureSeries<1>(dA, dA + sizeA, sizeA);
+  measureSeries<64>(dA, dA + sizeA, sizeA);
 }
