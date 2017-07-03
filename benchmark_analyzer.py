@@ -27,6 +27,11 @@ for m in range(1,100):
     for n in range(1,100):
         arithIntensity[m, n] = 2*m*n/(m+n)
 
+typeKey = {"DR" : "double precision", "FR" : "single precision", "DC" : "double precision complex", "FC" : "single precision complex"}
+deviceKey = {"Tesla K20m" : "K20m", "Tesla P100-PCIE-16GB" : "P100"}
+methodKey = {"FGENV1" : "GENV1", "FGENV1T" : "GENV1 (w/ texture loads)", "FGENV3" : "GENV3", "FGENV3T" : "GENV3 (w/ texture loads)", "FGENV4" : "GENV4", "FGENV4T" : "GENV4 (w/ texture loads)", "FGENV7" : "GENV7", "FGENV8" : "GENV8", "CUBLAS" : "cuBLAS", "FIX_V3" : "FIX3", "FIX_FB" : "FIXFB"}
+valueKey = {"flops" : "flop rate in GFlop/s", "bw" : "effective data transfer rate in GB/s"}
+shortValueKey = {"flops" : "GFlop/s", "bw" : "GB/s"}
 
 def makeGrid(res, axis1, axis2, value, max1=-1, max2=-1):
 
@@ -102,7 +107,7 @@ def rooflinePlot(multype, device, types, name, inplace, zerobeta, streamBW, peak
     path = pathPrefix + "roofline_" + device.replace(" ", "_") + "_" + types + "_" + name +".pdf"
 
     plt.savefig(path, transparent=True, bbox_inches="tight")
-    desc = "Roofline normalized efficiency, " + device + ", types " + types + ", version " + name.replace("_", "-")
+    desc = multype + " Roofline utilization of " + methodKey[name] + " on a " + deviceKey[device]
 #    plt.show()
     return [path, desc]
 
@@ -118,12 +123,14 @@ def absolutePlot(multype, device, types, name, inplace, zerobeta, value):
     plt.ylabel("N")
     plt.xlim(0.5, plt.xlim()[1])
     plt.ylim(0.5, plt.ylim()[1])
-    plt.colorbar()
     plt.xticks([1] + list(range(1,grid.shape[0]+1))[7::8])
     plt.yticks([1] + list(range(1,grid.shape[1]+1))[7::8])
     plt.grid(linestyle="-", alpha=0.1, color="black")
     path = pathPrefix + value + "_" + device.replace(" ", "_") + "_" + types + "_" + name +".pdf"
-    desc = value + " on " + device + ", types " + types + " of version " + name.replace("_", "-")
+    desc = multype + " " + valueKey[value] + " of " + methodKey[name] + " on a " + deviceKey[device]
+
+    cbar = plt.colorbar()
+
 
     plt.savefig(path, transparent=True, bbox_inches="tight")
 #    plt.show()
@@ -134,24 +141,15 @@ def absolutePlot(multype, device, types, name, inplace, zerobeta, value):
 def speedupOver(commonKeys, discriminator, value1, value2, max1=-1, max2=-1):
     whereClause = ""
     filename = pathPrefix + "speedup_"
-    desc = "Speedup of " + value1.replace("_", "-") + " over " + value2.replace("_", "-")
+    if discriminator == "name":
+        desc = methodKey[value1] + " vs " + methodKey[value2]
 
-    typeKey = {"DR" : "double precision", "FR" : "single precision", "DC" : "double precision complex", "FC" : "single precision complex"}
-
-    desc += " ("
+    desc += " on a "
     for key in commonKeys:
         whereClause += key[0] + "=\"" + key[1] + "\" AND "
         filename += key[1].replace(" ", "_") + "_"
         if key[0] == "device":
-            if desc[-1] != "(":
-                desc += ", "
-            desc += key[1]
-        if key[0] == "types":
-            if desc[-1] != "(":
-                desc += ", "
-            desc += typeKey[key[1]]
-    desc += ")"
-
+            desc += deviceKey[key[1]]
 
     filename += value1 + "_vs_" + value2 + ".pdf"
 
