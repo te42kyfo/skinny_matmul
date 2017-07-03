@@ -78,21 +78,26 @@ void LDS() {
       << setprecision(4) << setw(7) << shmemThroughput / 1.e9 << "\n";
 }
 
-template <size_t bufferSize>
+enum class MEMPATH { TEX, L1 };
+
+template <size_t bufferSize, MEMPATH MEM>
 __global__ void L2LatencyKernel(double* A, size_t innerIterations) {
-  size_t tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
 
   double sum = 0;
 #pragma unroll(1)
-  for (int i = 0; i < innerIterations / bufferSize; i++) {
-#pragma unroll(1)
-    for (int n = 0; n < bufferSize; n++) {
-      size_t idx = (tidx + n * blockDim.x * gridDim.x) % bufferSize;
-      sum += __ldg(A + idx);
+  for (int i = 0; i < innerIterations * 64 / bufferSize; i++) {
+    #pragma unroll(1)
+    for (int n = threadIdx.x; n < bufferSize; n+=64) {
+      if (MEM == MEMPATH::TEX) {
+        sum += __ldg(A + n);
+      } else {
+        sum += A[n];
+      }
     }
   }
 
-  A[tidx] = sum;
+  A[threadIdx.x] = sum;
 }
 
 double callKernel(void* func, double* dA, size_t K, int bC, int bS) {
@@ -103,7 +108,7 @@ double callKernel(void* func, double* dA, size_t K, int bC, int bS) {
   return 0.0;
 }
 
-template <size_t bufferSize>
+template <size_t bufferSize, MEMPATH MEM>
 void L2Latency() {
   cudaDeviceProp prop;
   int deviceId;
@@ -111,11 +116,12 @@ void L2Latency() {
   GPU_ERROR(cudaGetDeviceProperties(&prop, deviceId));
   std::string deviceName = prop.name;
 
-  size_t innerIterations = 1024 * 1024;
+  size_t innerIterations =  256 * 1024;
   std::function<double()> callKernelFunc =
-      std::bind(callKernel, (void*)L2LatencyKernel<bufferSize>, dA,
+      std::bind(callKernel, (void*)L2LatencyKernel<bufferSize, MEM>, dA,
                 innerIterations, 1, 64);
 
+  callKernelFunc();
   callKernelFunc();
   GPU_ERROR(cudaDeviceSynchronize());
   double t1 = dtime();
@@ -133,17 +139,53 @@ void L2Latency() {
 
   double dt = t2 - t1;
   double clock = prop.clockRate * 1.0e3;
-  cout << "Latency: " << deviceName << "  "
+  cout << setprecision(1) << setw(4) << fixed;
+  cout << "Latency: " << deviceName << "  " << setw(8)
        << bufferSize * sizeof(double) / 1024 << "kB  " << dt * 1000 << "ms  "
-       << clock / 1.e9 << "GHz  " << L2BW << "GB/s  " << L2hitrate << "%  "
-       << texHitrate << "%  " << dt * clock / innerIterations << "cyc\n";
+       << clock / 1.e6 << "MHz  " << L2BW << "GB/s  " << setw(5) << L2hitrate
+       << "%  " << setw(5) << texHitrate << "%  "
+       << dt * clock / innerIterations << "cyc\n";
 }
 
 int main(int argc, char** argv) {
+  measureMetricInit();
+
   GPU_ERROR(cudaMalloc(&dA, sizeof(double) * sizeA));
   initKernel<<<52, 256>>>(dA, sizeA);
-  LDS();
-  L2Latency<2 * 1024>();
-  L2Latency<4 * 1024>();
-  L2Latency<512 * 1024>();
+  //  LDS();
+
+
+  L2Latency<1 * 1024, MEMPATH::TEX>();  // 8
+  L2Latency<1 * 1024, MEMPATH::TEX>();  // 8
+  cout << "\n";
+  L2Latency<2 * 1024, MEMPATH::TEX>();  // 16
+  L2Latency<2 * 1024, MEMPATH::TEX>();  // 16
+  cout << "\n";
+  L2Latency<4 * 1024, MEMPATH::TEX>();  // 32
+  L2Latency<4 * 1024, MEMPATH::TEX>();  // 32
+  cout << "\n";
+  L2Latency<64 * 1024, MEMPATH::TEX>();  // 512
+  L2Latency<64 * 1024, MEMPATH::TEX>();  // 512
+  cout << "\n";
+  L2Latency<512 * 1024, MEMPATH::TEX>();  // 4MB
+  L2Latency<512 * 1024, MEMPATH::TEX>();  // 4MB
+  cout << "\n";
+  L2Latency<1024 * 1024, MEMPATH::TEX>();  // 8MB
+  L2Latency<1024 * 1024, MEMPATH::TEX>();  // 8MB
+  cout << "\n";
+  cout << "\n";
+  L2Latency<2 * 1024, MEMPATH::L1>();  // 16
+  L2Latency<2 * 1024, MEMPATH::L1>();  // 16
+  cout << "\n";
+  L2Latency<4 * 1024, MEMPATH::L1>();  // 32
+  L2Latency<4 * 1024, MEMPATH::L1>();  // 32
+  cout << "\n";
+  L2Latency<64 * 1024, MEMPATH::L1>();  // 512
+  L2Latency<64 * 1024, MEMPATH::L1>();  // 512
+  cout << "\n";
+  L2Latency<512 * 1024, MEMPATH::L1>();  // 4MB
+  L2Latency<512 * 1024, MEMPATH::L1>();  // 4MB
+  cout << "\n";
+  L2Latency<1024 * 1024, MEMPATH::L1>();  // 8MB
+  L2Latency<1024 * 1024, MEMPATH::L1>();  // 8MB
 }

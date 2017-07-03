@@ -15,7 +15,7 @@ do
     for (( y=1 ; y<=$yrange; y+=1 ))
     do
         make perf M=$x N=$y MULTYPE=$multype TYPES=$dtype PREFIX=./build 1>&2  &
-        while test $(jobs -p | wc -w) -ge 40; do sleep 1; done
+        while test $(jobs -p | wc -w) -ge 60; do sleep 1; done
     done
 done
 

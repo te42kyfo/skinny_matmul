@@ -98,6 +98,8 @@ double measureMatmul(MatmulFunctionType matmulFunction, size_t M, size_t N,
 int main(int argc, char** argv) {
   BenchDB db("benchmarks.db");
 
+  measureMetricInit();
+
   cudaDeviceProp prop;
   int deviceId;
 
@@ -130,7 +132,7 @@ int main(int argc, char** argv) {
     n1 = n2 = PARN;
   }
 
-  size_t maxMatrixSize = 1 * ((size_t)1 << 30) / (2 * sizeof(dtype));
+  size_t maxMatrixSize = 8 * ((size_t)1 << 30) / (2 * sizeof(dtype));
   totalA = maxMatrixSize;
 
 #ifdef TSMM
@@ -163,16 +165,17 @@ int main(int argc, char** argv) {
 #endif
 
       for (auto matmulVersion : versions) {
-        size_t K = maxK / 100;
-        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount, 1,
-                      false, -1.0);
-        double resultTime = measureMatmul(matmulVersion.first, M, N, K, lda,
-                                          ldb, ldc, smCount, 1, false, -1.0);
+        size_t K = maxK / 100 + 1;
+        measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc, smCount * 4,
+                      1, false, -1.0);
+        double resultTime =
+            measureMatmul(matmulVersion.first, M, N, K, lda, ldb, ldc,
+                          smCount * 4, 1, false, -1.0);
 
         while (resultTime > 0 && resultTime < 0.005 && K < maxK) {
           K = min(maxK, 2 * K);
           resultTime = measureMatmul(matmulVersion.first, M, N, K, lda, ldb,
-                                     ldc, smCount, 1, false, -1.0);
+                                     ldc, smCount * 4, 1, false, -1.0);
         }
 
         for (int self = 0; self <= (M == N || tsmm_mode ? 1 : 0); self++) {

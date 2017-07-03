@@ -1,19 +1,22 @@
 NVCC := nvcc
 
-#internal flags
-NVCCFLAGS   := -std=c++11 -O3 -arch=sm_35 --compiler-options="-O2 -pipe -Wall -fopenmp -g " -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable" -Xcompiler \"-Wl,-rpath,$(CUDA_HOME)/extras/CUPTI/lib64/\" #  -Xptxas="-v"
+CUDA_HOME ?=  $(CUDATOOLKIT_HOME)
+
+NVCCFLAGS   := -std=c++11 -O3 -arch=sm_60 --compiler-options="-O2 -pipe -Wall -fopenmp -fno-exceptions" -Xcompiler -rdynamic --generate-line-info -Xcudafe "--diag_suppress=code_is_unreachable" -Xcompiler \"-Wl,-rpath,$(CUDA_HOME)/extras/CUPTI/lib64/\" #  -Xptxas="-v"
+
+
 CCFLAGS     :=
 LDFLAGS     := -L/opt/cuda/lib64 -L../magma/lib/ -lcublas  -L$(CUDA_HOME)/extras/CUPTI/lib64 -lcupti -lcuda
 INCLUDES 	:= -I../magma/include -I$(CUDA_HOME)/extras/CUPTI/include
 M 			:= 1
 N			:= 1
-TSMM_VERSIONS 		:=  -DFIX_FB -DFIX3 -DCUBLAS
-TSMTTSM_VERSIONS 	:= -DFIX_GENV8
 
-# -DFIX_GENV1 -DFIX_GENV1T -DFIX_GENV3 -DFIX_GENV3T -DFIX_GENV4 -DFIX_GENV4T -DFIX_SPECSMALL -DFIX_GENV7 -DFIX_GENV8 -DCUBLAS
+TSMM_VERSIONS 		:= -DFIX3 -DFIX_FB -DCUBLAS
+TSMTTSM_VERSIONS 	:= # -DFIX_GENV3 -DFIX_GENV3T -DFIX_GENV4 -DFIX_GENV4T -DFIX_GENV7 -DFIX_GENV8 -DCUBLAS
+
 TYPES 		:= DR
-MULTYPE		:= TSMM
-GIT_BRANCH_NAME := $(shell git status --porcelain --branch | grep '\#\#' | cut -c 4-)
+MULTYPE		:= TSMTTSM
+GIT_BRANCH_NAME := $(shell git rev-parse --abbrev-ref HEAD)
 CONSTANTS	:= -DPARM=$M -DPARN=$N -D$(MULTYPE)=1 -D$(TYPES)=1 $(TSMTTSM_VERSIONS) $(TSMM_VERSIONS) -DVERBOSE_ERRORS -DGIT_BRANCH_NAME="\"$(GIT_BRANCH_NAME)\""
 PREFIX		:= ./build/
 
